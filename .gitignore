@@ -1,3 +1,5 @@
 /node_modules
-src/main.ts
+/src/main.ts
 *.py
+/out
+.vscode
