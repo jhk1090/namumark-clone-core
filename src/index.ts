@@ -372,6 +372,7 @@ export class NamuMark {
   // re.sub fix
   manageInclude() {
     let includeNum = 0;
+    const useIncludeLink = this.config.useIncludeLink;
     const includeRegex = /\[include\(((?:(?!\[include\(|\)\]|<\/div>).)+)\)\](\n?)/i;
     let includeCountMax = (this.renderData.match(includeRegex) || []).length * 10;
     while (true) {
@@ -2217,8 +2218,181 @@ try {
   }
 
   // re.sub fix
+  // manageHeading() {
+  //   let tocList = [];
+
+  //   // make heading base
+  //   const headingRegex = /\n((={1,6})(#?) ?([^\n]+))\n/;
+  //   let headingCountAll = (this.renderData.match(globalRegExp(headingRegex)) || []).length * 3;
+  //   let headingStack = [0, 0, 0, 0, 0, 0];
+  //   let headingCount = 0;
+
+  //   while (true) {
+  //     headingCount += 1;
+
+  //     const headingData = headingRegex.exec(this.renderData);
+  //     if (!headingData) {
+  //       break;
+  //     } else if (headingCountAll < 0) {
+  //       console.error("Error : render heading count overflow");
+  //       break;
+  //     } else {
+  //       const headingDataOriginal = headingData[0];
+  //       const headingDataGroups = headingData.slice(1);
+
+  //       const headingDataLastRegex = / ?(#?={1,6}[^=]*)$/;
+  //       const headingDataLast = headingDataGroups[3].match(headingDataLastRegex);
+  //       let headingDataLastValue = headingDataLast ? headingDataLast[1] : "";
+
+  //       const headingDataText = headingDataGroups[3].replace(new RegExp(headingDataLastRegex, "g"), "");
+
+  //       const headingDataDiff = headingDataGroups[2] + headingDataGroups[1];
+  //       if (headingDataDiff !== headingDataLastValue) {
+  //         // front != back -> restore
+  //         let headingDataAll = headingDataGroups[0];
+
+  //         for (let forA = 6; forA >= 1; forA--) {
+  //           const forAStr = forA.toString();
+  //           const headingRestoreRegex = new RegExp(`^={${forAStr}}|={${forAStr}}$`, "g");
+
+  //           headingDataAll = headingDataAll.replace(headingRestoreRegex, `<heading_${forAStr}>`);
+  //         }
+
+  //         this.renderData = this.renderData.replace(headingRegex, `\n${headingDataAll}\n`);
+  //       } else {
+  //         const headingLevel = headingDataGroups[1].length;
+  //         const headingLevelStr = headingLevel.toString();
+
+  //         headingStack[headingLevel - 1] += 1;
+  //         for (let forA = headingLevel; forA < 6; forA++) {
+  //           headingStack[forA] = 0;
+  //         }
+
+  //         const headingStackStr = headingStack.join(".").replace(/(\.0)+$/g, "");
+  //         tocList.push(["", headingDataText]);
+
+  //         this.renderDataJS += `
+  //                   function opennamuHeadingFolding(data, element = '') {
+  //                       let fol = document.getElementById(data);
+  //                       if(fol.style.display === '' || fol.style.display === 'inline-block' || fol.style.display === 'block') {
+  //                           document.getElementById(data).style.display = 'none';
+  //                       } else {
+  //                           document.getElementById(data).style.display = 'block';
+  //                       }
+                        
+  //                       if(element !== '') {
+  //                           console.log(element.innerHTML);
+  //                           if(element.innerHTML !== '⊖') {
+  //                               element.innerHTML = '⊖';
+  //                           } else {
+  //                               element.innerHTML = '⊕';
+  //                           }
+  //                       }
+  //                   }\n
+  //               `;
+
+  //         let headingFolding = ["⊖", "block", "1"];
+  //         if (headingDataGroups[2]) {
+  //           headingFolding = ["⊕", "none", "0.5"];
+  //         }
+
+  //         let headingIdName = "edit_load_" + headingCount;
+  //         if (this.docSet["docType"] !== "view") {
+  //           headingIdName = this.docSet["docInclude"] + "edit_load_" + headingCount;
+  //         }
+
+  //         const dataName = this.getToolDataStorage(
+  //           `<h${headingLevelStr}>` +
+  //             '<span id="' +
+  //             this.docSet["docInclude"] +
+  //             "opennamu_heading_" +
+  //             headingCount +
+  //             '_sub" style="opacity: ' +
+  //             headingFolding[2] +
+  //             '">',
+  //           `<a id="${headingIdName}" href="/edit_section/${headingCount}/${urlPas(
+  //             this.docName
+  //           )}">✎</a><a href="javascript:void(0);" onclick="javascript:opennamu_heading_folding('${
+  //             this.docSet["docInclude"]
+  //           }opennamu_heading_${headingCount}', this);">${headingFolding[0]}</a></sub></span></h${headingLevelStr}>`,
+  //           headingDataOriginal
+  //         );
+
+  //         const headingDataComplete = `\n<front_br>${
+  //           headingCount !== 1 ? "</div>" : ""
+  //         }<${dataName}><heading_stack>${headingStackStr}</heading_stack> ${headingDataText}</${dataName}><div id="${
+  //           this.docSet["docInclude"]
+  //         }opennamuHeading_${headingCount}" style="display: ${headingFolding[1]};"><back_br>\n`;
+
+  //         this.renderData = this.renderData.replace(headingRegex, headingDataComplete);
+  //       }
+  //     }
+
+  //     headingCountAll -= 1;
+  //   }
+
+  //   // heading id adjust
+  //   const headingEndCount = (this.renderData.match(/<heading_stack>/g) || []).length;
+  //   for (let forA = 5; forA >= 0; forA--) {
+  //     const headingEndStackRegex = new RegExp(`<heading_stack>${"0\\.".repeat(forA)}`, "g");
+
+  //     const headingEndMatchCount = (this.renderData.match(headingEndStackRegex) || []).length;
+  //     if (headingEndMatchCount === headingEndCount) {
+  //       this.renderData = this.renderData.replace(headingEndStackRegex, "<heading_stack>");
+  //       break;
+  //     }
+  //   }
+
+  //   // heading id -> inline id
+  //   const headingIdRegex = /<heading_stack>([^<>]+)<\/heading_stack>/;
+  //   const headingIdRegexGlobal = /<heading_stack>([^<>]+)<\/heading_stack>/g;
+
+  //   let match;
+  //   const results: RegExpExecArray[] = [];
+
+  //   while ((match = headingIdRegexGlobal.exec(this.renderData)) !== null) {
+  //     results.push(match);
+  //   }
+
+  //   for (let index = 0; index < results.length; index++) {
+  //     const result = results[index];
+  //     const content = `<a href="#toc" id="s-${result[1]}">${result[1]}.</a>`;
+  //     this.renderData = this.renderData.replace(headingIdRegex, content);
+  //     tocList[index][0] = result[1];
+  //   }
+
+  //   // not heading restore
+  //   for (let forA = 1; forA <= 6; forA++) {
+  //     const forAStr = forA.toString();
+  //     const headingRestoreRegex = new RegExp(`<heading_${forAStr}>`, "g");
+  //     this.renderData = this.renderData.replace(headingRestoreRegex, "=".repeat(forA));
+  //   }
+
+  //   // make toc
+  //   let tocData = "";
+  //   if (tocList.length === 0) {
+  //     tocData = "";
+  //   } else {
+  //     tocData = `<div class="opennamu_TOC" id="toc"><span class="opennamu_TOC_title">${/*this.getToolLang('toc')*/ "목차"}</span><br>`;
+  //   }
+
+  //   for (const forA of tocList) {
+  //     tocData += `<br>${'<span style="margin-left: 10px;"></span>'.repeat(
+  //       forA[0].split(".").length - 1
+  //     )}<span class="opennamu_TOC_list"><a href="#s-${forA[0]}">${forA[0]}. </a><toc_inside>${forA[1]}</toc_inside></span>`;
+  //   }
+
+  //   if (tocData !== "") {
+  //     tocData += "</div>";
+  //     this.dataToc = tocData;
+  //     this.renderData += `<toc_data>${tocData}</toc_data>`;
+  //   } else {
+  //     this.dataToc = "";
+  //   }
+  // }
+
   manageHeading() {
-    let tocList = [];
+    let tocList: [string, string][] = [];
 
     // make heading base
     const headingRegex = /\n((={1,6})(#?) ?([^\n]+))\n/;
@@ -2229,102 +2403,86 @@ try {
     while (true) {
       headingCount += 1;
 
-      const headingData = headingRegex.exec(this.renderData);
-      if (!headingData) {
+      const headingDataMatch = headingRegex.exec(this.renderData);
+      if (!headingDataMatch) {
         break;
       } else if (headingCountAll < 0) {
         console.error("Error : render heading count overflow");
         break;
-      } else {
-        const headingDataOriginal = headingData[0];
-        const headingDataGroups = headingData.slice(1);
+      }
 
-        const headingDataLastRegex = / ?(#?={1,6}[^=]*)$/;
-        const headingDataLast = headingDataGroups[3].match(headingDataLastRegex);
-        let headingDataLastValue = headingDataLast ? headingDataLast[1] : "";
+      const headingDataOrg = headingDataMatch[0];
+      let headingData = headingDataMatch.slice(1);
 
-        const headingDataText = headingDataGroups[3].replace(new RegExp(headingDataLastRegex, "g"), "");
+      const headingDataLastRegex = / ?(#?={1,6}[^=]*)$/;
+      const headingDataLastMatch = headingData[3].match(headingDataLastRegex);
+      let headingDataLast = headingDataLastMatch ? headingDataLastMatch[1] : "";
 
-        const headingDataDiff = headingDataGroups[2] + headingDataGroups[1];
-        if (headingDataDiff !== headingDataLastValue) {
-          // front != back -> restore
-          let headingDataAll = headingDataGroups[0];
+      const headingDataText = headingData[3].replace(globalRegExp(headingDataLastRegex), "");
 
-          for (let forA = 6; forA >= 1; forA--) {
-            const forAStr = forA.toString();
-            const headingRestoreRegex = new RegExp(`^={${forAStr}}|={${forAStr}}$`, "g");
+      const headingDataDiff = headingData[2] + headingData[1];
+      if (headingDataDiff !== headingDataLast) {
+        // front != back -> restore
+        let headingDataAll = headingData[0]
 
-            headingDataAll = headingDataAll.replace(headingRestoreRegex, `<heading_${forAStr}>`);
-          }
-
-          this.renderData = this.renderData.replace(headingRegex, `\n${headingDataAll}\n`);
-        } else {
-          const headingLevel = headingDataGroups[1].length;
-          const headingLevelStr = headingLevel.toString();
-
-          headingStack[headingLevel - 1] += 1;
-          for (let forA = headingLevel; forA < 6; forA++) {
-            headingStack[forA] = 0;
-          }
-
-          const headingStackStr = headingStack.join(".").replace(/(\.0)+$/g, "");
-          tocList.push(["", headingDataText]);
-
-          this.renderDataJS += `
-                    function opennamuHeadingFolding(data, element = '') {
-                        let fol = document.getElementById(data);
-                        if(fol.style.display === '' || fol.style.display === 'inline-block' || fol.style.display === 'block') {
-                            document.getElementById(data).style.display = 'none';
-                        } else {
-                            document.getElementById(data).style.display = 'block';
-                        }
-                        
-                        if(element !== '') {
-                            console.log(element.innerHTML);
-                            if(element.innerHTML !== '⊖') {
-                                element.innerHTML = '⊖';
-                            } else {
-                                element.innerHTML = '⊕';
-                            }
-                        }
-                    }\n
-                `;
-
-          let headingFolding = ["⊖", "block", "1"];
-          if (headingDataGroups[2]) {
-            headingFolding = ["⊕", "none", "0.5"];
-          }
-
-          let headingIdName = "edit_load_" + headingCount;
-          if (this.docSet["docType"] !== "view") {
-            headingIdName = this.docSet["docInclude"] + "edit_load_" + headingCount;
-          }
-
-          const dataName = this.getToolDataStorage(
-            `<h${headingLevelStr}>` +
-              '<span id="' +
-              this.docSet["docInclude"] +
-              "opennamu_heading_" +
-              headingCount +
-              '_sub" style="opacity: ' +
-              headingFolding[2] +
-              '">',
-            `<a id="${headingIdName}" href="/edit_section/${headingCount}/${urlPas(
-              this.docName
-            )}">✎</a><a href="javascript:void(0);" onclick="javascript:opennamu_heading_folding('${
-              this.docSet["docInclude"]
-            }opennamu_heading_${headingCount}', this);">${headingFolding[0]}</a></sub></span></h${headingLevelStr}>`,
-            headingDataOriginal
-          );
-
-          const headingDataComplete = `\n<front_br>${
-            headingCount !== 1 ? "</div>" : ""
-          }<${dataName}><heading_stack>${headingStackStr}</heading_stack> ${headingDataText}</${dataName}><div id="${
-            this.docSet["docInclude"]
-          }opennamuHeading_${headingCount}" style="display: ${headingFolding[1]};"><back_br>\n`;
-
-          this.renderData = this.renderData.replace(headingRegex, headingDataComplete);
+        for (let index = 6; index >= 1; index--) {
+          const headingRestoreRegex = new RegExp('^={' + index + '}|={' + index + '}$');
+          headingDataAll = headingDataAll.replace(headingRestoreRegex, '<heading_' + index + '>')
         }
+
+        this.renderData = this.renderData.replace(headingRegex, "\n" + headingDataAll + "\n")
+      } else {
+        let headingLevel = headingData[1].length;
+        headingStack[headingLevel - 1] += 1;
+        for (let index = headingLevel; index < 6; index++) {
+          headingStack[index] = 0;
+        }
+
+        const headingStackStr = headingStack.join(".").replace(/(\.0)+$/g, "");
+        tocList.push(["", headingDataText])
+
+        let headingFolding = ['⊖', 'block', '1']
+        if (headingData[2])
+            headingFolding = ['⊕', 'none', '0.5']
+
+        let headingIdName = 'edit_load_' + headingCount
+        if (this.docSet["docType"] !== "view")
+          headingIdName = this.docSet['docInclude'] + 'edit_load_' + headingCount
+
+        const dataName = this.getToolDataStorage(
+          "<h" +
+            headingLevel +
+            '><span id="' +
+            this.docSet["docInclude"] +
+            "opennamu_heading_" +
+            headingCount +
+            '_sub" style="opacity: ' +
+            headingFolding[2] +
+            '">',
+          " <sub>" +
+            '<a id="' +
+            headingIdName +
+            '" href="/edit_section/' +
+            headingCount +
+            "/" +
+            urlPas(this.docName) +
+            '">✎</a> ' +
+            '<a href="javascript:void(0);" onclick="javascript:opennamu_heading_folding(\'' +
+            this.docSet["docInclude"] +
+            "opennamu_heading_" +
+            headingCount +
+            "', this);\">" +
+            headingFolding[0] +
+            "</a></sub>" +
+            "</span></h" +
+            headingLevel +
+            ">",
+          headingDataOrg
+        );
+
+      const headingDataComplete = '' + '\n<front_br>' + (headingCount != 1 ? '</div>' : '') + '<' + dataName + '>' + '<heading_stack>' + headingStackStr + '</heading_stack>' + ' ' + headingDataText + '</' + dataName + '>' + '<div id="' + this.docSet['docInclude'] + 'opennamu_heading_' + headingCount + '" style="display: ' + headingFolding[1] + ';">' + '<back_br>\n' + '';
+
+      this.renderData = this.renderData.replace(headingRegex, headingDataComplete);
       }
 
       headingCountAll -= 1;
@@ -2332,9 +2490,8 @@ try {
 
     // heading id adjust
     const headingEndCount = (this.renderData.match(/<heading_stack>/g) || []).length;
-    for (let forA = 5; forA >= 0; forA--) {
-      const headingEndStackRegex = new RegExp(`<heading_stack>${"0\\.".repeat(forA)}`, "g");
-
+    for (let index = 5; index >= 0; index--) {
+      const headingEndStackRegex = new RegExp('<heading_stack>' + ('0\\.'.repeat(index)), "g");
       const headingEndMatchCount = (this.renderData.match(headingEndStackRegex) || []).length;
       if (headingEndMatchCount === headingEndCount) {
         this.renderData = this.renderData.replace(headingEndStackRegex, "<heading_stack>");
@@ -2361,30 +2518,28 @@ try {
     }
 
     // not heading restore
-    for (let forA = 1; forA <= 6; forA++) {
-      const forAStr = forA.toString();
-      const headingRestoreRegex = new RegExp(`<heading_${forAStr}>`, "g");
-      this.renderData = this.renderData.replace(headingRestoreRegex, "=".repeat(forA));
+    for (let index = 1; index < 7; index++) {
+      const headingRestoreRegex = new RegExp("<heading_" + index + ">", "g");
+      this.renderData = this.renderData.replace(headingRestoreRegex, "=".repeat(index));
     }
 
     // make toc
-    let tocData = "";
-    if (tocList.length === 0) {
-      tocData = "";
-    } else {
-      tocData = `<div class="opennamu_TOC" id="toc"><span class="opennamu_TOC_title">${/*this.getToolLang('toc')*/ "목차"}</span><br>`;
+    let tocData = ""
+    if (tocList.length !== 0) {
+      tocData = '' + '<div class="opennamu_TOC" id="toc">' + '<span class="opennamu_TOC_title">' + "목차" + '</span>' + '<br>' + ''
     }
 
-    for (const forA of tocList) {
-      tocData += `<br>${'<span style="margin-left: 10px;"></span>'.repeat(
-        forA[0].split(".").length - 1
-      )}<span class="opennamu_TOC_list"><a href="#s-${forA[0]}">${forA[0]}. </a><toc_inside>${forA[1]}</toc_inside></span>`;
+    for (const element of tocList) {
+      tocData += '' + '<br>' + ('<span style="margin-left: 10px;"></span>'.repeat(
+        element[0].split(".").length - 1
+        )) + '<span class="opennamu_TOC_list">' + '<a href="#s-' + element[0] + '">' + element[0] + '. ' + '</a>' + '<toc_inside>' + element[1] + '</toc_inside>' + '</span>' + ''
     }
 
     if (tocData !== "") {
       tocData += "</div>";
+
       this.dataToc = tocData;
-      this.renderData += `<toc_data>${tocData}</toc_data>`;
+      this.renderData += "<toc_data>" + tocData + "</toc_data>"
     } else {
       this.dataToc = "";
     }
