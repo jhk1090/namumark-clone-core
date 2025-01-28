@@ -10,7 +10,7 @@ function sha224Replace(data: string) {
 }
 
 function escapeHtml(text: string) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
 }
 
 function unescapeHtml(html: string) {
@@ -19,7 +19,11 @@ function unescapeHtml(html: string) {
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'");
+    .replace(/&#x27;/g, "'");
+}
+
+const globalRegExp = (regexp: RegExp) => {
+  return new RegExp(regexp, "g");
 }
 
 interface IDatabase {
@@ -57,7 +61,7 @@ interface IConfig {
 }
 const skinUseConfig = ["useStrike", "useBold", "useCategorySet", "useCategoryChangeTitle", "useFootnoteSet", "useFootnoteNumber", "useViewRealFootnoteNum", "useIncludeLink", "useImageSet", "useTocSet", "useExterLink", "useLinkDelimiter", "useCssDarkmode", "useTableScroll", "useTableTransparent", "useListViewChange", "useViewJoke", "useMathScroll", "useViewHistory", "useFontSize", "useMonaco"] as const;
 export class NamuMark {
-  wikiText: string = "";
+  renderData: string = "";
 
   dataTempStorage: Record<string, string> = {};
   dataTempStorageCount: number = 0;
@@ -101,12 +105,12 @@ export class NamuMark {
 
   constructor(wikiText: string, config: IConfig, database: IDatabase, doType: "exter" | "inter"="exter") {
     this.doType = doType;
-    this.wikiText = wikiText.replace("\r", "");
+    this.renderData = wikiText.replace("\r", "");
     if (doType === "exter") {
-      this.wikiText = escapeHtml(this.wikiText);
+      this.renderData = escapeHtml(this.renderData);
     }
 
-    this.wikiText = "<back_br>\n" + this.wikiText + "\n<front_br>";
+    this.renderData = "<back_br>\n" + this.renderData + "\n<front_br>";
     console.log(JSON.stringify(config))
 
     config.docSet = { docInclude: v4().replaceAll("-", "") + "_", docType: "view" };
@@ -335,7 +339,7 @@ export class NamuMark {
   }
 
   manageRemark() {
-    this.wikiText = this.wikiText.replace(/\n##[^\n]+/g, "\n<front_br>");
+    this.renderData = this.renderData.replace(/\n##[^\n]+/g, "\n<front_br>");
   }
 
   manageIncludeDefault() {
@@ -361,26 +365,26 @@ export class NamuMark {
       }
     };
 
-    this.wikiText = this.wikiText.replace(/(\\+)?@([ㄱ-힣a-zA-Z0-9_]+)=((?:\\@|[^@\n])+)@/g, handler);
-    this.wikiText = this.wikiText.replace(/(\\+)?@([ㄱ-힣a-zA-Z0-9_]+)@/g, handler);
+    this.renderData = this.renderData.replace(/(\\+)?@([ㄱ-힣a-zA-Z0-9_]+)=((?:\\@|[^@\n])+)@/g, handler);
+    this.renderData = this.renderData.replace(/(\\+)?@([ㄱ-힣a-zA-Z0-9_]+)@/g, handler);
   }
 
   // re.sub fix
   manageInclude() {
     let includeNum = 0;
     const includeRegex = /\[include\(((?:(?!\[include\(|\)\]|<\/div>).)+)\)\](\n?)/i;
-    let includeCountMax = (this.wikiText.match(includeRegex) || []).length * 10;
+    let includeCountMax = (this.renderData.match(includeRegex) || []).length * 10;
     while (true) {
       includeNum += 1;
       const includeChangeList: Record<string, string> = {};
-      let match = this.wikiText.match(includeRegex);
+      let match = this.renderData.match(includeRegex);
       if (includeCountMax < 0) {
         break;
       } else if (!match) {
         break;
       } else {
         if (this.docSet["docType"] === "include") {
-          this.wikiText = this.wikiText.replace(includeRegex, "");
+          this.renderData = this.renderData.replace(includeRegex, "");
         } else {
           const matchOriginal = match[0];
           const macroSplitRegex = /(?:^|,) *([^,]+)/;
@@ -432,7 +436,7 @@ export class NamuMark {
             dataName = this.getToolDataStorage(includeLink, "", matchOriginal);
           }
 
-          this.wikiText = this.wikiText.replace(includeRegex, `<${dataName}></${dataName}>` + match[1]);
+          this.renderData = this.renderData.replace(includeRegex, `<${dataName}></${dataName}>` + match[1]);
         }
       }
 
@@ -449,325 +453,321 @@ export class NamuMark {
         return `<${dataName}>`;
       }
     };
-    this.wikiText = this.wikiText.replace(/\\(&lt;|&gt;|&#x27;|&quot;|&amp;|.)/g, handler);
+    this.renderData = this.renderData.replace(/\\(&lt;|&gt;|&#x27;|&quot;|&amp;|.)/g, handler);
   }
 
   // re.sub fix
   manageMiddle() {
-    const middleRegex = /{{{([^{](?:(?!{{{|}}}).|\n)*)?(?:}|<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>)}}/;
     let wikiCount = 0;
     let htmlCount = 0;
     let syntaxCount = 0;
     let foldingCount = 0;
-
     let interCount = 0;
     let interData: Record<string, string> = {};
-    let middleCountAll = (this.wikiText.match(middleRegex) || []).length * 10;
-    while (true) {
-      const middleData = this.wikiText.match(middleRegex) || null;
-      let middleDataNew!: string;
-      if (middleCountAll < 0) {
-        break;
-      } else if (!middleData) {
-        break;
-      } else {
-        let middleDataOriginal = middleData[0];
-        const middleSlash = middleData[2];
 
+    const middleRegex = /{{{([^{](?:(?!{{{|}}}).|\n)*)?(?:}|<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>)}}/;
+    let middleCountAll = (this.renderData.match(globalRegExp(middleRegex)) || []).length * 10;
+    while (true) {
+      const middleDataMatch = this.renderData.match(middleRegex);
+      if (middleCountAll < 0) break;
+      else if (!middleDataMatch) break;
+
+      let middleDataOrg = middleDataMatch[0];
+      const middleSlash = middleDataMatch[2];
+      if (middleSlash) {
+        if (this.dataTempStorage[middleSlash] !== "}") {
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
+          continue;
+        }
+      }
+
+      let middleData = middleDataMatch[1] || "";
+      const middleNameMatch = middleData.match(/^([^ \n]+)/)
+      let middleDataPass = "";
+      let middleDataAdd = "";
+      let dataName = "";
+
+      if (!middleNameMatch) {
         if (middleSlash) {
-          if (this.dataTempStorage[middleSlash] !== "}") {
-            middleDataOriginal = middleDataOriginal.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, `<temp_${middleSlash}>`);
-            this.wikiText = this.wikiText.replace(middleRegex, middleDataOriginal);
-            continue;
+          middleData += "\\";
+        }
+
+        const dataRevert = this.getToolDataRevert(middleData).replace(/^\n/g, "").replace(/\n$/g, "");
+        
+        dataName = this.getToolDataStorage(dataRevert, "", middleDataOrg);
+        this.renderData = this.renderData.replace(middleRegex, ('<' + dataName + '>' + middleDataPass + '</' + dataName + '>' + middleDataAdd));
+        middleCountAll -= 1;
+        continue;
+      }
+
+      const middleName = middleNameMatch[1].toLowerCase();
+      if (middleName === "#!wiki") {
+        if (middleSlash) {
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
+          this.renderData = this.renderData.replace(middleRegex, middleDataOrg)
+          continue;
+        }
+
+        let wikiData = middleData.replace(/^#!wiki +/g, "");
+        const wikiRegex = /^(?:(?:style=(&quot;(?:(?:(?!&quot;).)*)&quot;|&#x27;(?:(?:(?!&#x27;).)*)&#x27;)))(?:\n| +)/i;
+        const wikiDarkRegex = /^(?:(?:dark-style=(&quot;(?:(?:(?!&quot;).)*)&quot;|&#x27;(?:(?:(?!&#x27;).)*)&#x27;)))(?:\n| +)/i;
+        let wikiDataStyleData = "";
+
+        while (true) {
+          let darkOnly = 0;
+          let wikiDataStyleMatch = wikiData.match(wikiRegex);
+          let wikiDataStyle!: string;
+          if (wikiDataStyleMatch) {
+            wikiData = wikiData.replace(globalRegExp(wikiRegex), "");
+          } else {
+            wikiDataStyleMatch = wikiData.match(wikiDarkRegex);
+            if (wikiDataStyleMatch) {
+              darkOnly = 1;
+              wikiData = wikiData.replace(globalRegExp(wikiDarkRegex), "");
+            } else {
+              break;
+            }
+          }
+          
+          if (wikiDataStyleMatch) {
+            wikiDataStyle = wikiDataStyleMatch[1];
+            if (wikiDataStyle) {
+              wikiDataStyle = wikiDataStyle.replaceAll('&#x27;', '')
+              wikiDataStyle = wikiDataStyle.replaceAll('&quot;', '')
+
+              if (darkOnly == 1 && this.darkmode == '1')
+                  wikiDataStyleData += wikiDataStyle
+              else if (darkOnly == 0)
+                  wikiDataStyleData += wikiDataStyle
+            } else {
+              wikiDataStyle = "";
+            }
+          } else {
+            wikiDataStyle = "";
           }
         }
 
-        middleDataNew = middleData[1];
-        if (!middleDataNew) {
-          middleDataNew = "";
+        const findRegex: RegExp[] = [
+          / *box-shadow *: *(([^,;]*)(,|;|$)){10,}/,
+          / *url\([^()]*\)/,
+          / *linear-gradient\((([^(),]+)(,|\))){10,}/,
+          / *position *: */
+        ]
+
+        for (const regex of findRegex) {
+          if (wikiDataStyleData.match(new RegExp(regex, "i"))) {
+            wikiDataStyleData = "";
+            break;
+          }
         }
 
-        const middleName = middleDataNew.match(/^([^ \n]+)/);
-        let middleNameNew!: string;
-        let middleDataPass = "";
-        let middleDataAdd = "";
-        let dataName = "";
-        let wikiSize = "";
-        if (middleName) {
-          middleNameNew = middleName[1]?.toLowerCase();
-          if (middleNameNew === "#!wiki") {
-            if (middleSlash) {
-              middleDataOriginal = middleDataOriginal.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
-              this.wikiText = this.wikiText.replace(middleRegex, middleDataOriginal);
-              continue;
-            }
+        wikiData = this.getToolDataRevert(wikiData).replace(/(^\n|\n$)/g, "");
+        interData["inter_data_" + interCount] = wikiData;
+        middleDataPass = '<inter_data_' + interCount + '>';
+        interCount += 1;
 
-            let wikiData = middleDataNew.replace(/^#!wiki +/g, "");
-            const wikiRegex = /^(?:(?:style=(&quot;(?:(?:(?!&quot;).)*)&quot;|&#039;(?:(?:(?!&#039;).)*)&#039;)))(?:\n| +)/i;
-            const wikiDarkRegex = /^(?:(?:dark-style=(&quot;(?:(?:(?!&quot;).)*)&quot;|&#039;(?:(?:(?!&#039;).)*)&#039;)))(?:\n| +)/i;
-            let wikiDataStyleData = ""
-            while (true) {
-              let darkOnly = 0;
-              let wikiDataStyle = wikiData.match(wikiRegex);
-              let wikiDataStyleNew!: string;
-              if (wikiDataStyle) {
-                wikiData = wikiData.replace(new RegExp(wikiRegex, "gi"), "")
-              } else {
-                wikiDataStyle = wikiData.match(wikiRegex);
-                if (wikiDataStyle) {
-                  darkOnly = 1;
-                  wikiData = wikiData.replace(new RegExp(wikiDarkRegex, "gi"), "")
-                } else {
-                  break;
-                }
-              }
+        dataName = this.getToolDataStorage('<div style="' + wikiDataStyleData + '">', '</div>', middleDataOrg);
+        wikiCount += 1;
+      } else if (middleName === "#!html") {
+        let htmlData = middleData.replace(/^#!html( |\n)/g, "");
+        if (middleSlash) {
+          htmlData += "\\"
+        }
 
-              if (wikiDataStyle) {
-                wikiDataStyleNew = wikiDataStyle[1];
-                if (wikiDataStyleNew) {
-                  wikiDataStyleNew = wikiDataStyleNew.replaceAll("&#039;", "")
-                  wikiDataStyleNew = wikiDataStyleNew.replaceAll("&quot;", "")
+        const dataRevert = this.getToolDataRevert(htmlData).replace(/^\n/g, "").replace(/\n$/g, "").replaceAll("&amp;nbsp;", "&nbsp;");
 
-                  if (darkOnly === 1 && this.darkmode === '1') {
-                    wikiDataStyleData += wikiDataStyleNew;
-                  } else if (darkOnly === 0) {
-                    wikiDataStyleData += wikiDataStyleNew;
-                  }
-                } else {
-                  wikiDataStyleNew = ""
-                }
-              } else {
-                wikiDataStyleNew = ""
-              }
-            }
+        this.renderDataJS += 'opennamu_do_render_html("' + this.docSet['docInclude'] + 'opennamu_wiki_' + htmlCount + '");\n'
 
-            const findRegex: RegExp[] = [
-              / *box-shadow *: *(([^,;]*)(,|;|$)){10,}/i,
-              / *url\([^()]*\)/i,
-              / *linear-gradient\((([^(),]+)(,|\))){10,}/i,
-              / *position *: */i
-            ]
+        dataName = this.getToolDataStorage('<span id="' + this.docSet['docInclude'] + 'opennamu_wiki_' + htmlCount + '">' + dataRevert, '</span>', middleDataOrg);
+        htmlCount += 1;
+      } else if (middleName === "#!folding") {
+        if (middleSlash) {
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
+          continue;
+        }
 
-            for (const regex of findRegex) {
-              if (wikiDataStyleData.match(regex)) {
-                wikiDataStyleData = "";
-                break;
-              }
-            }
-
-            wikiData = this.getToolDataRevert(wikiData).replace(/(^\n|\n$)/g, "");
-            interData["inter_data_" + interCount] = wikiData;
-            middleDataPass = "<inter_data_" + interCount + ">"
-            interCount += 1
-
-            dataName = this.getToolDataStorage(
-              `<div style="${wikiDataStyleData}">`,
-              "</div>",
-              middleDataOriginal
-            );
-            wikiCount += 1;
-          } else if (middleNameNew === "#!html") {
-            let htmlData = middleDataNew.replace(/^#!html( |\n)/g, ""); 
-            if (middleSlash) {
-              htmlData += "\\"
-            }
-
-            let dataRevert = this.getToolDataRevert(htmlData);
-            dataRevert = dataRevert
-              .replace(/^\n/g, "")
-              .replace(/\n$/g, "")
-              .replace(/&amp;nbsp;/g, "&nbsp;");
-
-            this.renderDataJS += 'opennamu_do_render_html("' + this.docSet['docInclude'] + 'opennamu_wiki_' + htmlCount + '");\n'
-
-            dataName = this.getToolDataStorage('<span id="' + this.docSet['docInclude'] + 'opennamu_wiki_' + htmlCount + '">' + dataRevert, '</span>', middleDataOriginal);
-            htmlCount += 1;
-          } else if (middleNameNew === "#!folding") {
-            if (middleSlash) {
-              middleDataOriginal = middleDataOriginal.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
-              this.wikiText = this.wikiText.replace(middleRegex, middleDataOriginal);
-              continue;
-            }
-
-            const wikiRegex = /^#!folding(?: ([^\n]*))?\n/i;
-            let wikiDataFolding = middleDataNew.match(wikiRegex);
-            let wikiDataFoldingNew;
-            let wikiData = middleDataNew.replace(wikiRegex, "");
-            if (wikiDataFolding) {
-              wikiDataFoldingNew = wikiDataFolding[1];
-              if (!wikiDataFoldingNew) {
-                wikiDataFoldingNew = "test";
-              }
-            } else {
-              wikiDataFoldingNew = "test";
-            }
-
-            wikiData = this.getToolDataRevert(wikiData).replace(/(^\n|\n$)/g, "");
-            interData["inter_data_" + interCount] = wikiData;
-            let wikiDataEnd = `<inter_data_${interCount}>`;
-            interCount += 1;
-
-            middleDataPass = wikiDataFoldingNew;
-
-            dataName = this.getToolDataStorage('<details><summary>', '</summary><div class="opennamu_folding">', middleDataOriginal)
-            let dataName2 = this.getToolDataStorage('', '</div></details>', '')
-            middleDataAdd = '<' + dataName2 + '>' + wikiDataEnd + '</' + dataName2 + '>'
-            foldingCount += 1;
-          } else if (middleNameNew === "#!syntax") {
-            if (middleSlash) {
-              middleDataOriginal = middleDataOriginal.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, `<temp_${middleSlash}>`);
-              this.wikiText = this.wikiText.replace(middleRegex, middleDataOriginal);
-              continue;
-            }
-
-            const wikiRegex = /^#!syntax(?: ([^\n]*))?\n/i;
-            let wikiDataSyntax = middleDataNew.match(wikiRegex);
-            let wikiDataSyntaxNew;
-            let wikiData = middleDataNew.replace(wikiRegex, "");
-            if (wikiDataSyntax) {
-              wikiDataSyntaxNew = wikiDataSyntax[1];
-              if (!wikiDataSyntaxNew) {
-                wikiDataSyntaxNew = "python";
-              } else {
-                if (wikiDataSyntaxNew === "asm" || wikiDataSyntaxNew === "assembly") {
-                  wikiDataSyntaxNew = "x86arm";
-                }
-              }
-            } else {
-              wikiDataSyntaxNew = "python";
-            }
-
-            if (syntaxCount === 0) {
-              this.renderDataJS += "hljs.highlightAll();\n";
-            }
-
-            if ((wikiData.split('\n').length - 1) > 10)
-              this.renderDataJS += 'hljs.lineNumbersBlock(document.getElementById("opennamu_syntax_' + syntaxCount + '"));\n'
-
-            dataName = this.getToolDataStorage(
-              '<pre id="syntax"><code class="' + wikiDataSyntax + '" id="opennamu_syntax_' + syntaxCount + '">' + wikiData,
-              "</code></pre>",
-              middleDataOriginal
-            );
-            syntaxCount += 1;
-          } else if (["+5", "+4", "+3", "+2", "+1"].concat(["-5", "-4", "-3", "-2", "-1"]).includes(middleNameNew)) {
-            if (middleSlash) {
-              middleDataOriginal = middleDataOriginal.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
-              this.wikiText = this.wikiText.replace(middleRegex, middleDataOriginal);
-              continue;
-            }
-
-            const wikiData = middleDataNew.replace(/^(\+|\-)[1-5]( |\n)/g, "");
-
-            if (middleNameNew === "+5") wikiSize = "200";
-            else if (middleNameNew === "+4") wikiSize = "180";
-            else if (middleNameNew === "+3") wikiSize = "160";
-            else if (middleNameNew === "+2") wikiSize = "140";
-            else if (middleNameNew === "+1") wikiSize = "120";
-            else if (middleNameNew === "-5") wikiSize = "50";
-            else if (middleNameNew === "-4") wikiSize = "60";
-            else if (middleNameNew === "-3") wikiSize = "70";
-            else if (middleNameNew === "-2") wikiSize = "80";
-            else wikiSize = "90";
-
-            middleDataPass = wikiData;
-            dataName = this.getToolDataStorage('<span style="font-size:' + wikiSize + '%">', "</span>", middleDataOriginal);
-          } else if (middleNameNew?.match(/^@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))/)) {
-            if (middleSlash) {
-              middleDataOriginal = middleDataOriginal.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
-              this.wikiText = this.wikiText.replace(middleRegex, middleDataOriginal);
-              continue;
-            }
-            const wikiColor = middleNameNew.match(/^@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(,@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?/);
-            let wikiColorData = "";
-            if (wikiColor) {
-              if (wikiColor[1]) {
-                wikiColorData += "#" + wikiColor[1];
-              } else {
-                wikiColorData += wikiColor[2];
-              }
-
-              if (wikiColor[3]) {
-                if (wikiColor[4]) {
-                  wikiColorData += ",#" + wikiColor[4];
-                } else if (wikiColor[5]) {
-                  wikiColorData += "," + wikiColor[5];
-                }
-              }
-            } else {
-              wikiColorData += "red";
-            }
-
-            let wikiColorNew = this.getToolDarkModeSplit(this.getToolCssSafe(wikiColorData));
-            let wikiData = middleDataNew.replace(/^@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(?:,@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?( |\n)/g, "");
-            middleDataPass = wikiData;
-            dataName = this.getToolDataStorage('<span style="background-color:' + wikiColorNew + '">', "</span>", middleDataOriginal);
-          } else if (middleNameNew?.match(/^#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))/)) {
-            if (middleSlash) {
-              middleDataOriginal = middleDataOriginal.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
-              this.wikiText = this.wikiText.replace(middleRegex, middleDataOriginal);
-              continue;
-            }
-            const wikiColor = middleNameNew.match(/^#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(,#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?/);
-            let wikiColorData = "";
-            console.log(wikiColor);
-            if (wikiColor) {
-              if (wikiColor[1]) {
-                wikiColorData += "#" + wikiColor[1];
-              } else {
-                wikiColorData += wikiColor[2];
-              }
-
-              if (wikiColor[3]) {
-                if (wikiColor[4]) {
-                  wikiColorData += ",#" + wikiColor[4];
-                } else if (wikiColor[5]) {
-                  wikiColorData += "," + wikiColor[5];
-                }
-              }
-            } else {
-              wikiColorData += "red";
-            }
-
-            let wikiColorNew = this.getToolDarkModeSplit(this.getToolCssSafe(wikiColorData));
-            let wikiData = middleDataNew.replace(/^#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(?:,#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?( |\n)/g, "");
-            middleDataPass = wikiData;
-            dataName = this.getToolDataStorage('<span style="color:' + wikiColorNew + '">', "</span>", middleDataOriginal);
-          } else {
-            if (middleSlash) {
-              middleDataNew += "\\";
-            }
-
-            let dataRevert = this.getToolDataRevert(middleDataNew).replace(/^\n/g, "").replace(/\n$/g, "");
-            dataName = this.getToolDataStorage(dataRevert, "", middleDataOriginal);
+        const wikiRegex = /^#!folding(?: ([^\n]*))?\n/i;
+        let wikiDataFoldingMatch = middleData.match(wikiRegex);
+        let wikiDataFolding;
+        let wikiData = middleData.replace(globalRegExp(wikiRegex), "");
+        if (wikiDataFoldingMatch) {
+          wikiDataFolding = wikiDataFoldingMatch[1];
+          if (!wikiDataFolding) {
+            wikiDataFolding = "test";
           }
         } else {
-          if (middleSlash) {
-            middleDataNew += "\\";
+          wikiDataFolding = "test";
+        }
+
+        wikiData = this.getToolDataRevert(wikiData).replace(/(^\n|\n$)/g, "");
+        interData["inter_data_" + interCount] = wikiData;
+        let wikiDataEnd = '<inter_data_' + interCount + '>';
+        interCount += 1;
+
+        middleDataPass = wikiDataFolding;
+        dataName = this.getToolDataStorage('<details><summary>', '</summary><div class="opennamu_folding">', middleDataOrg);
+        const dataName2 = this.getToolDataStorage('', '</div></details>', '');
+        middleDataAdd = '<' + dataName2 + '>' + wikiDataEnd + '</' + dataName2 + '>';
+
+        foldingCount += 1;
+      } else if (middleName === "#!syntax") {
+        if (middleSlash) {
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
+          continue;
+        }
+
+        const wikiRegex = /^#!syntax(?: ([^\n]*))?\n/i;
+        const wikiDataSyntaxMatch = middleData.match(wikiRegex);
+        let wikiDataSyntax;
+        let wikiData = middleData.replace(wikiRegex, "");
+
+        if (wikiDataSyntaxMatch) {
+          wikiDataSyntax = wikiDataSyntaxMatch[1];
+          if (!wikiDataSyntax) {
+            wikiDataSyntax = "python"
+          } else if (wikiDataSyntax === "asm" || wikiDataSyntax === "assembly") {
+            wikiDataSyntax = "x86arm";
+          }
+        } else {
+          wikiDataSyntax = "python";
+        }
+
+        if (syntaxCount === 0) {
+          this.renderDataJS += 'hljs.highlightAll();\n'
+          this.renderDataJS += 'hljs.initLineNumbersOnLoad();\n'
+        }
+
+        dataName = this.getToolDataStorage('<pre id="syntax"><code class="' + wikiDataSyntax + '">' + wikiData, '</code></pre>', middleDataOrg)
+        syntaxCount += 1;
+      
+        // 오픈나무 전용 문법 제외: #!dark, #!white
+      } else if (['+5', '+4', '+3', '+2', '+1', '-5', '-4', '-3', '-2', '-1'].includes(middleName)) {
+        if (middleSlash) {
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
+          continue;
+        }
+
+        let wikiData = middleData.replace(/^(\+|\-)[1-5]( |\n)/g, "");
+        let wikiSize!: string;
+        if (middleName == '+5')
+            wikiSize = '200'
+        else if (middleName == '+4')
+            wikiSize = '180'
+        else if (middleName == '+3')
+            wikiSize = '160'
+        else if (middleName == '+2')
+            wikiSize = '140'
+        else if (middleName == '+1')
+            wikiSize = '120'
+        else if (middleName == '-5')
+            wikiSize = '50'
+        else if (middleName == '-4')
+            wikiSize = '60'
+        else if (middleName == '-3')
+            wikiSize = '70'
+        else if (middleName == '-2')
+            wikiSize = '80'
+        else
+            wikiSize = '90'
+
+        middleDataPass = wikiData;
+        dataName = this.getToolDataStorage('<span style="font-size:' + wikiSize + '%">', '</span>', middleDataOrg)
+      } else if (middleName.match(/^@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))/)) {
+        if (middleSlash) {
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
+          continue;
+        }
+
+        const wikiColorMatch = middleName.match(/^@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(,@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?/);
+        let wikiColorData = "";
+        if (wikiColorMatch) {
+          if (wikiColorMatch[1]) {
+            wikiColorData += "#" + wikiColorMatch[1];
+          } else {
+            wikiColorData += wikiColorMatch[2];
           }
 
-          let dataRevert = this.getToolDataRevert(middleDataNew).replace(/^\n/g, "").replace(/\n$/g, "");
-          dataName = this.getToolDataStorage(dataRevert, "", middleDataOriginal);
+          if (wikiColorMatch[3]) {
+            if (wikiColorMatch[4]) {
+              wikiColorData += ",#" + wikiColorMatch[4]
+            } else if (wikiColorMatch[5]) {
+              wikiColorData += "," + wikiColorMatch[5];
+            }
+          }
+        } else {
+          wikiColorData += "red";
         }
-        this.wikiText = this.wikiText.replace(middleRegex, "<" + dataName + ">" + middleDataPass + "</" + dataName + ">" + middleDataAdd);
+
+        let wikiColor = this.getToolCssSafe(wikiColorData);
+        wikiColor = this.getToolDarkModeSplit(wikiColor);
+
+        const wikiData = middleData.replace(/^@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(?:,@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?( |\n)/g, "");
+
+        middleDataPass = wikiData;
+        dataName = this.getToolDataStorage('<span style="background-color:' + wikiColor + '">', '</span>', middleDataOrg);
+      } else if (middleName.match(/^#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))/)) {
+        if (middleSlash) {
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
+          continue;
+        }
+
+        const wikiColorMatch = middleName.match(/^#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(,#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?/);
+        let wikiColorData = "";
+        if (wikiColorMatch) {
+          if (wikiColorMatch[1]) {
+            wikiColorData += "#" + wikiColorMatch[1];
+          } else {
+            wikiColorData += wikiColorMatch[2];
+          }
+
+          if (wikiColorMatch[3]) {
+            if (wikiColorMatch[4]) {
+              wikiColorData += ",#" + wikiColorMatch[4]
+            } else if (wikiColorMatch[5]) {
+              wikiColorData += "," + wikiColorMatch[5];
+            }
+          }
+        } else {
+          wikiColorData += "red";
+        }
+
+        let wikiColor = this.getToolCssSafe(wikiColorData);
+        wikiColor = this.getToolDarkModeSplit(wikiColor);
+
+        const wikiData = middleData.replace(/^#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(?:,#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?( |\n)/g, "");
+
+        middleDataPass = wikiData;
+        dataName = this.getToolDataStorage('<span style="color:' + wikiColor + '">', '</span>', middleDataOrg);
+      } else {
+        if (middleSlash) {
+          middleData += "\\";
+        }
+
+        const dataRevert = this.getToolDataRevert(middleData).replace(/^\n/g, "").replace(/\n$/g, "")
+        dataName = this.getToolDataStorage(dataRevert, "", middleDataOrg);
       }
+
+      this.renderData = this.renderData.replace(middleRegex, ('<' + dataName + '>' + middleDataPass + '</' + dataName + '>' + middleDataAdd));
       middleCountAll -= 1;
     }
-    const interDataRegex = /<(inter_data_[0-9]+)>/;
-
-    const replaceInter = () => {
-      let interCount = 0;
-
-      const replaceSub = (match: string, p1: string) => {
-        let data = interData[p1]
-        data = data.replace(new RegExp(interDataRegex, "g"), replaceSub);
+    const interDataRegex = /<(inter_data_[0-9]+)>/g;
+    const replaceInterData = () => {
+      const replaceSub = (match: string, ...groups: string[]) => {
+        let data = interData[groups[0]];
+        data = data.replace(interDataRegex, replaceSub);
 
         return data;
       }
 
-      return (match: string, p1: string) => {
-        let data = interData[p1]
-        data = data.replace(new RegExp(interDataRegex, "g"), replaceSub);
+      return (match: string, ...groups: string[]) => {
+        let data = interData[groups[0]];
+        data = data.replace(interDataRegex, replaceSub);
 
         data = this.doInterRender(data, this.docSet["docInclude"] + "opennamu_inter_render_" + interCount)
         interCount += 1;
@@ -776,8 +776,7 @@ export class NamuMark {
       }
     }
 
-    this.wikiText = this.wikiText.replace(new RegExp(interDataRegex, "g"), replaceInter())
-    this.wikiText = this.wikiText.replace(/<temp_(?<in>(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<$<in>>");
+    this.renderData = this.renderData.replace(interDataRegex, replaceInterData()).replace(/'<temp_(?<in>(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<$<in>>")
   }
 
   // re.sub fix
@@ -808,93 +807,111 @@ try {
 
     const mathRegex = /\[math\(((?:(?!\[math\(|\)\]).|\n)+)\)\]/gi;
     const mathRegex2 = /&lt;math&gt;((?:(?!&lt;math&gt;|&lt;\/math&gt;).)+)&lt;\/math&gt;/gi;
-    this.wikiText = this.wikiText.replace(mathRegex2, handler);
-    this.wikiText = this.wikiText.replace(mathRegex, handler);
+    this.renderData = this.renderData.replace(mathRegex2, handler);
+    this.renderData = this.renderData.replace(mathRegex, handler);
   }
 
   // re.sub fix
   manageTable() {
-    this.wikiText = this.wikiText.replace(/\n +\|\|/g, "\n||");
-
-    const manageTableParameter = (cellCount: string, parameter: string, data: string, option = {}) => {
-      let tableParameterAll = { div: "", class: "", table: "", tr: "", td: "", col: "", colspan: "", rowspan: "", data: "" };
+    this.renderData = this.renderData.replace(/\n +\|\|/g, '\n||');
+    
+    const manageTableParameter = (cellCount: string, parameter: string, data: string) => {
+      const tableParameterAll = { div: "", class: "", table: "", tr: "", td: "", col: "", colspan: "", rowspan: "", data: "" };
 
       let tableAlignAuto = 1;
       let tableColspanAuto = 1;
-
-      // todo: useless parameter return
       let doAnyThing = "";
 
-      const tableParameterRegex = /&lt;((?:(?!&lt;|&gt;).)+)&gt;/g;
+      const tableParameterRegex = /&lt;((?:(?!&lt;|&gt;).)+)&gt;/;
+      const tableParameterRegexGlobal = /&lt;((?:(?!&lt;|&gt;).)+)&gt;/g;
       let match;
-      let results = [];
-
-      // exec()를 사용하여 모든 일치 항목을 찾기
-      while ((match = tableParameterRegex.exec(parameter)) !== null) {
-        results.push(match);
+      let tableParameterResults = [];
+      while ((match = tableParameterRegexGlobal.exec(parameter)) !== null) {
+        tableParameterResults.push(match);
       }
+      tableParameterResults.forEach(array => array.splice(0, 1));
+      tableParameterResults = tableParameterResults.flat()
 
-      // Python 보정
-      results.forEach(array => array.splice(0, 1));
-      results = results.flat()
-
-      for (const tableParameter of results) {
+      for (const tableParameter of tableParameterResults) {
         const tableParameterSplit = tableParameter.split("=");
         let tableParameterData!: string;
         if (tableParameterSplit.length === 2) {
-          const tableParameterName = tableParameterSplit[0].replaceAll(" ", "").toLowerCase();
+          const tableParameterName = tableParameterSplit[0].replace(' ', "").toLowerCase();
           tableParameterData = this.getToolCssSafe(tableParameterSplit[1]);
 
-          if (tableParameterName === "tablebgcolor")
-            tableParameterAll["table"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "tablewidth") {
-            tableParameterAll["div"] += "width:" + this.getToolPxAddCheck(tableParameterData) + ";";
-            tableParameterAll["table"] += "width:100%";
-          } else if (tableParameterName === "tableheight") tableParameterAll["table"] += "height:" + this.getToolPxAddCheck(tableParameterData) + ";";
-          else if (tableParameterName === "tablealign") {
-            if (tableParameterData === "right") tableParameterAll["div"] += "float:right;";
-            else if (tableParameterData === "center") tableParameterAll["div"] += "margin:auto;";
-            tableParameterAll["table"] += "margin:auto;";
-          } else if (tableParameterName === "tableclass") tableParameterAll["class"] = tableParameterSplit[1];
-          else if (tableParameterName === "tabletextalign") tableParameterAll["table"] += "text-align:" + tableParameterData + " !important;";
-          else if (tableParameterName === "tablecolor") tableParameterAll["table"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "tablebordercolor")
-            tableParameterAll["table"] += "border:2px solid " + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "rowbgcolor")
-            tableParameterAll["tr"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "rowtextalign") tableParameterAll["tr"] += "text-align:" + tableParameterData + " !important;";
-          else if (tableParameterName === "rowcolor") tableParameterAll["tr"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "colcolor") tableParameterAll["col"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "colbgcolor")
-            tableParameterAll["col"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "coltextalign")
-            tableParameterAll["col"] += "text-align:" + tableParameterData + " !important;";
-          else if (tableParameterName === "bgcolor") tableParameterAll["td"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "color") tableParameterAll["td"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
-          else if (tableParameterName === "width") tableParameterAll["td"] += "width:" + this.getToolPxAddCheck(tableParameterData) + ";";
-          else if (tableParameterName === "height") tableParameterAll["td"] += "height:" + this.getToolPxAddCheck(tableParameterData) + ";";
+          if (tableParameterName == 'tablebgcolor')
+              tableParameterAll['table'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'tablewidth') {
+            tableParameterAll['div'] += 'width:' + this.getToolPxAddCheck(tableParameterData) + ';'
+            tableParameterAll['table'] += 'width:100%;'
+          }
+          else if (tableParameterName == 'tableheight')
+              tableParameterAll['table'] += 'height:' + this.getToolPxAddCheck(tableParameterData) + ';'
+          else if (tableParameterName == 'tablealign') {
+            if (tableParameterData == 'right')
+                tableParameterAll['div'] += 'float:right;'
+            else if (tableParameterData == 'center') {
+              tableParameterAll['div'] += 'margin:auto;'
+              tableParameterAll['table'] += 'margin:auto;'
+            }
+          }
+          else if (tableParameterName == 'tableclass')
+              tableParameterAll['class'] = tableParameterSplit[1]
+          else if (tableParameterName == 'tabletextalign')
+              tableParameterAll['table'] += 'text-align:' + tableParameterData + ' !important;'
+          else if (tableParameterName == 'tablecolor')
+              tableParameterAll['table'] += 'color:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'tablebordercolor')
+              tableParameterAll['table'] += 'border:2px solid ' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'rowbgcolor')
+              tableParameterAll['tr'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'rowtextalign')
+              tableParameterAll['tr'] += 'text-align:' + tableParameterData + ' !important;'
+          else if (tableParameterName == 'rowcolor')
+              tableParameterAll['tr'] += 'color:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'colcolor')
+              tableParameterAll['col'] += 'color:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'colbgcolor')
+              tableParameterAll['col'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'coltextalign')
+              tableParameterAll['col'] += 'text-align:' + tableParameterData + ' !important;'
+          else if (tableParameterName == 'bgcolor')
+              tableParameterAll['td'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'color')
+              tableParameterAll['td'] += 'color:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+          else if (tableParameterName == 'width')
+              tableParameterAll['td'] += 'width:' + this.getToolPxAddCheck(tableParameterData) + ';'
+          else if (tableParameterName == 'height')
+              tableParameterAll['td'] += 'height:' + this.getToolPxAddCheck(tableParameterData) + ';'
           else
-            doAnyThing += '&lt;' + tableParameter + '&gt;';
+              doAnyThing += "&lt;" + tableParameter + "&gt;";
         } else if (tableParameterSplit.length === 1) {
-          if (tableParameter === "nopad") {
-            tableParameterAll['td'] += 'padding: 0 !important;';
-          } else if (tableParameter.match(/^-[0-9]+$/)) {
-            tableColspanAuto = 0;
-            tableParameterAll["colspan"] = tableParameter.replace(/[^0-9]+/g, "");
-          } else if (tableParameter.match(/^(\^|v)?\|[0-9]+$/)) {
-            if (tableParameter[0] === "^") tableParameterAll["td"] += "vertical-align: top;";
-            else if (tableParameter[0] === "v") tableParameterAll["td"] += "vertical-align: bottom;";
+          if (tableParameter == 'nopad')
+              tableParameterAll['td'] += 'padding: 0 !important;'
+          else if (tableParameter.match(/^-[0-9]+$/)) {
+            tableColspanAuto = 0
+            tableParameterAll['colspan'] = tableParameter.replace(/[^0-9]+/g, "");
+          }
+          else if (tableParameter.match(/^(\^|v)?\|[0-9]+$/)) {
+            if (tableParameter[0] == '^')
+                tableParameterAll['td'] += 'vertical-align: top;'
+            else if (tableParameter[0] == 'v')
+                tableParameterAll['td'] += 'vertical-align: bottom;'
 
-            tableParameterAll["rowspan"] = tableParameter.replace(/[^0-9]+/g, "");
-          } else if (["(", ":", ")"].includes(tableParameter)) {
-            tableAlignAuto = 0;
-            if (tableParameter === "(") tableParameterAll["td"] += "text-align: left !important;";
-            else if (tableParameter === ":") tableParameterAll["td"] += "text-align: center !important;";
-            // BUG: ?
-            else if (tableParameter === ")") tableParameterAll["td"] += "text-align: right !important;";
-          } else if (tableParameter.match(/^(?:(?:#((?:[0-9a-f-A-F]{3}){1,2}))|(\w+))$/)) {
+            tableParameterAll['rowspan'] = tableParameter.replace(/[^0-9]+/g, "");
+          }
+          else if (['(', ':', ')'].includes(tableParameter) ) {
+            tableAlignAuto = 0
+            if (tableParameter == '(')
+                tableParameterAll['td'] += 'text-align: left !important;'
+            else if (tableParameter == ':')
+                tableParameterAll['td'] += 'text-align: center !important;'
+            else if (tableParameter == ')')
+                tableParameterAll['td'] += 'text-align: right !important;'
+          }
+          else if (tableParameter.match(/^(?:(?:#((?:[0-9a-f-A-F]{3}){1,2}))|(\w+))$/)) {
             tableParameterData = this.getToolCssSafe(tableParameter);
-            tableParameterAll["td"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+            tableParameterAll['td'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
           } else {
             doAnyThing += '&lt;' + tableParameter + '&gt;'
           }
@@ -915,149 +932,354 @@ try {
         } else {
           tableParameterAll["td"] += "text-align: left;";
           if (data.match(/ $/)) {
-            data = data.replace(/ $/g, "");
+            data = data.replace(/ $/, "");
           }
         }
-      } else {
-        data = data.replace(/^ /g, "");
-        data = data.replace(/ $/g, "");
       }
 
       if (tableColspanAuto === 1) {
-        tableParameterAll["colspan"] = String(Math.floor(cellCount.length / 2));
+        tableParameterAll["colspan"] = "" + Math.floor(cellCount.length / 2);
       }
 
-      tableParameterAll["data"] =  doAnyThing + data;
-
-      return tableParameterAll;
+      tableParameterAll["data"] = doAnyThing + data;
+      return tableParameterAll
     };
 
-    const tableRegex =
-      /\n((?:(?:(?:(?:\|\|)+)|(?:\|[^|]+\|(?:\|\|)*))\n?(?:(?:(?!\|\|).)+))(?:(?:\|\||\|\|\n|(?:\|\|)+(?!\n)(?:(?:(?!\|\|).)+)\n*)*)\|\|)\n/s;
-    const tableSubRegex = /(\n?)((?:\|\|)+)((?:&lt;(?:(?:(?!&lt;|&gt;).)+)&gt;)*)((?:\n*(?:(?:(?:(?!\|\|).)+)\n*)+)|(?:(?:(?!\|\|).)*))/g;
+    const tableRegex = /\n((?:(?:(?:(?:\|\|)+)|(?:\|[^|]+\|(?:\|\|)*))\n?(?:(?:(?!\|\|).)+))(?:(?:\|\||\|\|\n|(?:\|\|)+(?!\n)(?:(?:(?!\|\|).)+)\n*)*)\|\|)\n/s;
+    const tableSubRegex = /(\n?)((?:\|\|)+)((?:&lt;(?:(?:(?!&lt;|&gt;).)+)&gt;)*)((?:\n*(?:(?:(?:(?!\|\|).)+)\n*)+)|(?:(?:(?!\|\|).)*))/;
     const tableCaptionRegex = /^\|([^|]+)\|/;
-    let tableCountAll = (this.wikiText.match(tableRegex) || []).length * 2;
-
+    let tableCountAll = (this.renderData.match(globalRegExp(tableRegex)) || []).length * 2;
     while (true) {
-      const tableData = this.wikiText.match(tableRegex);
-      let tableDataNew!: string;
-      if (tableCountAll < 0) {
-        console.log("Error: render table count overflow");
-        break;
-      } else if (!tableData) {
-        break;
+      const tableDataMatch = this.renderData.match(tableRegex)
+      if (tableCountAll < 0) {console.error("error: render table count overflow"); break;}
+      else if (!tableDataMatch) break;
+
+      let tableData = tableDataMatch[1];
+      const tableCaptionMatch = tableData.match(tableCaptionRegex);
+      let tableCaption!: string;
+      if (tableCaptionMatch) {
+        tableCaption = `<caption>${tableCaptionMatch[1]}</caption>`;
+        tableData = tableData.replace(globalRegExp(tableCaptionRegex), "||");
       } else {
-        const tableDataOriginal = tableData[0];
-        tableDataNew = tableData[1];
-
-        const tableCaption = tableDataNew.match(tableCaptionRegex);
-        let tableCaptionNew!: string;
-        if (tableCaption) {
-          tableCaptionNew = "<caption>" + tableCaption[1] + "</caption>";
-          tableDataNew = tableDataNew.replace(new RegExp(tableCaptionRegex, "g"), "||");
-        } else {
-          tableCaptionNew = "";
-        }
-
-        const tableParameter: { div: string; class: string; table: string; col: Record<string, string>; rowspan: Record<string, number>, tr: string; td: string; } = {
-          div: "",
-          class: "",
-          table: "",
-          tr: "",
-          td: "",
-          col: {},
-          rowspan: {},
-        };
-        let tableDataEnd = "";
-        let tableColNum = 0;
-        let tableTrChange = 0;
-
-        let match;
-        let results = [];
-
-        // exec()를 사용하여 모든 일치 항목을 찾기
-        while ((match = tableSubRegex.exec(tableDataNew)) !== null) {
-          results.push(match);
-        }
-
-        // Python 보정
-        results.forEach(array => array.splice(0, 1));
-
-        for (const tableSub of results) {
-          console.log(JSON.stringify(tableSub), JSON.stringify(tableSub[3]));
-          const tableDataIn = tableSub[3].replace(/^\n+/g, "");
-
-          if (tableSub[0] !== "" && tableTrChange === 1) {
-            tableColNum = 0;
-            tableDataEnd += '</tr><tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + '</tr>';
-
-            tableParameter["tr"] = ""
-            tableParameter["td"] = ""
-          }
-
-          const tableSubParameter = manageTableParameter(tableSub[1], tableSub[2], tableDataIn);
-          tableParameter["tr"] += tableSubParameter["tr"]
-
-          if (!tableParameter["rowspan"][tableColNum]) tableParameter["rowspan"][tableColNum] = 0;
-          else {
-            if (tableParameter["rowspan"][tableColNum] !== 0) {
-              tableParameter["rowspan"][tableColNum] -= 1;
-              tableColNum += Number(tableSubParameter["colspan"]);
-            }
-          }
-
-          if (tableSubParameter["rowspan"] !== "") {
-            const rowspanInt = Number(tableSubParameter["rowspan"]);
-            if (rowspanInt > 1) tableParameter["rowspan"][tableColNum] = rowspanInt - 1;
-          }
-
-          if (!tableParameter["col"][tableColNum]) tableParameter["col"][tableColNum] = "";
-
-          tableParameter["div"] += tableSubParameter["div"];
-          tableParameter["class"] = tableSubParameter["class"] !== "" ? tableSubParameter["class"] : tableParameter["class"];
-          tableParameter["table"] += tableSubParameter["table"];
-          tableParameter["col"][tableColNum] += tableSubParameter["col"];
-
-          if (tableSub[2] == "" && tableSub[3] == "") tableTrChange = 1;
-          else {
-            tableTrChange = 0;
-
-            tableParameter["td"] +=
-              '<td colspan="' +
-              tableSubParameter["colspan"] +
-              '" rowspan="' +
-              tableSubParameter["rowspan"] +
-              '" style="' +
-              tableParameter["col"][tableColNum] +
-              tableSubParameter["td"] +
-              '"><back_br>\n' +
-              tableSubParameter["data"] +
-              "\n<front_br></td>";
-          }
-
-          tableColNum += Number(tableSubParameter["colspan"]);
-        }
-
-        tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + '</tr>'
-
-        tableDataEnd =
-          '<table class="' + tableParameter["class"] + '" style="' + tableParameter["table"] + '">' + tableCaptionNew + tableDataEnd + "</table>";
-        tableDataEnd = '<div class="table_safe" style="' + tableParameter["div"] + '">' + tableDataEnd + "</div>";
-
-        this.wikiText = this.wikiText.replace(tableRegex, "\n<front_br>" + tableDataEnd + "\n");
+        tableCaption = "";
       }
 
+      const tableParameter: { div: string; class: string; table: string; tr: string; td: string; col: Record<number, string>; rowspan: Record<number, number> } = { div: "", class: "", table: "", tr: "", td: "", col: {}, rowspan: {} }
+      let tableDataEnd = "";
+      let tableColNum = 0;
+      let tableTrChange = 0;
+      
+      let match;
+      let tableSubResults = [];
+      const tableSubRegexGlobal = globalRegExp(tableSubRegex);
+      while ((match = tableSubRegexGlobal.exec(tableData)) !== null) {
+        tableSubResults.push(match);
+      }
+      // 0번 그룹 제거
+      tableSubResults.forEach(array => array.splice(0, 1));
+      for (const tableSub of tableSubResults) {
+        let tableDataIn = tableSub[3];
+        tableDataIn = tableDataIn.replace(/^\n+/g, "");
+
+        if (tableSub[0] !== "" && tableTrChange === 1) {
+          tableColNum = 0;
+          tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + '</tr>';
+          tableParameter["tr"] = ""
+          tableParameter["td"] = ""
+        }
+
+        let tableSubParameter = manageTableParameter(tableSub[1], tableSub[2], tableDataIn);
+        tableParameter["tr"] += tableSubParameter["tr"];
+
+        if (!tableParameter["rowspan"][tableColNum]) {
+          tableParameter["rowspan"][tableColNum] = 0;
+        } else {
+          if (tableParameter["rowspan"][tableColNum] !== 0) {
+            tableParameter["rowspan"][tableColNum] -= 1;
+            tableColNum += 1;
+          }
+        }
+
+        if (tableSubParameter["rowspan"] !== "") {
+          const rowspanInt = Number(tableSubParameter["rowspan"]);
+          if (rowspanInt > 1) {
+            tableParameter["rowspan"][tableColNum] = rowspanInt - 1;
+          }
+        }
+
+        if (!tableParameter["col"][tableColNum]) {
+          tableParameter["col"][tableColNum] = "";
+        }
+
+        tableParameter["div"] += tableSubParameter["div"];
+        tableParameter["class"] = tableSubParameter["class"] !== "" ? tableSubParameter["class"] : tableParameter["class"];
+        tableParameter["table"] += tableSubParameter["table"];
+        tableParameter["col"][tableColNum] += tableSubParameter["col"];
+
+        if (tableSub[2] === "" && tableSub[3] === "") {
+          tableTrChange = 1;
+        } else {
+          tableTrChange = 0;
+          tableParameter["td"] += '<td colspan="' + tableSubParameter['colspan'] + '" rowspan="' + tableSubParameter['rowspan'] + '" style="' + tableParameter['col'][tableColNum] + tableSubParameter['td'] + '"><back_br>\n' + tableSubParameter['data'] + '\n<front_br></td>'
+        }
+
+        tableColNum += 1;
+        console.log(tableSubParameter['col'][tableColNum], tableSubParameter['td'])
+      }
+
+      tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + '</tr>'
+      tableDataEnd = '<table class="' + tableParameter['class'] + '" style="' + tableParameter['table'] + '">' + tableCaption + tableDataEnd + '</table>'
+      tableDataEnd = '<div class="table_safe" style="' + tableParameter['div'] + '">' + tableDataEnd + '</div>';
+      this.renderData = this.renderData.replace(tableRegex, ('\n<front_br>' + tableDataEnd + '\n'));
+      
       tableCountAll -= 1;
     }
   }
+  // manageTable() {
+  //   this.wikiText = this.wikiText.replace(/\n +\|\|/g, "\n||");
+
+  //   const manageTableParameter = (cellCount: string, parameter: string, data: string, option = {}) => {
+  //     let tableParameterAll = { div: "", class: "", table: "", tr: "", td: "", col: "", colspan: "", rowspan: "", data: "" };
+
+  //     let tableAlignAuto = 1;
+  //     let tableColspanAuto = 1;
+
+  //     // todo: useless parameter return
+  //     let doAnyThing = "";
+
+  //     const tableParameterRegex = /&lt;((?:(?!&lt;|&gt;).)+)&gt;/g;
+  //     let match;
+  //     let results = [];
+
+  //     // exec()를 사용하여 모든 일치 항목을 찾기
+  //     while ((match = tableParameterRegex.exec(parameter)) !== null) {
+  //       results.push(match);
+  //     }
+
+  //     // Python 보정
+  //     results.forEach(array => array.splice(0, 1));
+  //     results = results.flat()
+
+  //     for (const tableParameter of results) {
+  //       const tableParameterSplit = tableParameter.split("=");
+  //       let tableParameterData!: string;
+  //       if (tableParameterSplit.length === 2) {
+  //         const tableParameterName = tableParameterSplit[0].replaceAll(" ", "").toLowerCase();
+  //         tableParameterData = this.getToolCssSafe(tableParameterSplit[1]);
+
+  //         if (tableParameterName === "tablebgcolor")
+  //           tableParameterAll["table"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "tablewidth") {
+  //           tableParameterAll["div"] += "width:" + this.getToolPxAddCheck(tableParameterData) + ";";
+  //           tableParameterAll["table"] += "width:100%";
+  //         } else if (tableParameterName === "tableheight") tableParameterAll["table"] += "height:" + this.getToolPxAddCheck(tableParameterData) + ";";
+  //         else if (tableParameterName === "tablealign") {
+  //           if (tableParameterData === "right") tableParameterAll["div"] += "float:right;";
+  //           else if (tableParameterData === "center") tableParameterAll["div"] += "margin:auto;";
+  //           tableParameterAll["table"] += "margin:auto;";
+  //         } else if (tableParameterName === "tableclass") tableParameterAll["class"] = tableParameterSplit[1];
+  //         else if (tableParameterName === "tabletextalign") tableParameterAll["table"] += "text-align:" + tableParameterData + " !important;";
+  //         else if (tableParameterName === "tablecolor") tableParameterAll["table"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "tablebordercolor")
+  //           tableParameterAll["table"] += "border:2px solid " + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "rowbgcolor")
+  //           tableParameterAll["tr"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "rowtextalign") tableParameterAll["tr"] += "text-align:" + tableParameterData + " !important;";
+  //         else if (tableParameterName === "rowcolor") tableParameterAll["tr"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "colcolor") tableParameterAll["col"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "colbgcolor")
+  //           tableParameterAll["col"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "coltextalign")
+  //           tableParameterAll["col"] += "text-align:" + tableParameterData + " !important;";
+  //         else if (tableParameterName === "bgcolor") tableParameterAll["td"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "color") tableParameterAll["td"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         else if (tableParameterName === "width") tableParameterAll["td"] += "width:" + this.getToolPxAddCheck(tableParameterData) + ";";
+  //         else if (tableParameterName === "height") tableParameterAll["td"] += "height:" + this.getToolPxAddCheck(tableParameterData) + ";";
+  //         else
+  //           doAnyThing += '&lt;' + tableParameter + '&gt;';
+  //       } else if (tableParameterSplit.length === 1) {
+  //         if (tableParameter === "nopad") {
+  //           tableParameterAll['td'] += 'padding: 0 !important;';
+  //         } else if (tableParameter.match(/^-[0-9]+$/)) {
+  //           tableColspanAuto = 0;
+  //           tableParameterAll["colspan"] = tableParameter.replace(/[^0-9]+/g, "");
+  //         } else if (tableParameter.match(/^(\^|v)?\|[0-9]+$/)) {
+  //           if (tableParameter[0] === "^") tableParameterAll["td"] += "vertical-align: top;";
+  //           else if (tableParameter[0] === "v") tableParameterAll["td"] += "vertical-align: bottom;";
+
+  //           tableParameterAll["rowspan"] = tableParameter.replace(/[^0-9]+/g, "");
+  //         } else if (["(", ":", ")"].includes(tableParameter)) {
+  //           tableAlignAuto = 0;
+  //           if (tableParameter === "(") tableParameterAll["td"] += "text-align: left !important;";
+  //           else if (tableParameter === ":") tableParameterAll["td"] += "text-align: center !important;";
+  //           // BUG: ?
+  //           else if (tableParameter === ")") tableParameterAll["td"] += "text-align: right !important;";
+  //         } else if (tableParameter.match(/^(?:(?:#((?:[0-9a-f-A-F]{3}){1,2}))|(\w+))$/)) {
+  //           tableParameterData = this.getToolCssSafe(tableParameter);
+  //           tableParameterAll["td"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+  //         } else {
+  //           doAnyThing += '&lt;' + tableParameter + '&gt;'
+  //         }
+  //       } else {
+  //         doAnyThing += '&lt;' + tableParameter + '&gt;'
+  //       }
+  //     }
+
+  //     if (tableAlignAuto === 1) {
+  //       if (data.match(/^ /)) {
+  //         data = data.replace(/^ /g, "");
+  //         if (data.match(/ $/)) {
+  //           tableParameterAll["td"] += "text-align: center;";
+  //           data = data.replace(/ $/g, "");
+  //         } else {
+  //           tableParameterAll["td"] += "text-align: right;";
+  //         }
+  //       } else {
+  //         tableParameterAll["td"] += "text-align: left;";
+  //         if (data.match(/ $/)) {
+  //           data = data.replace(/ $/g, "");
+  //         }
+  //       }
+  //     } else {
+  //       data = data.replace(/^ /g, "");
+  //       data = data.replace(/ $/g, "");
+  //     }
+
+  //     if (tableColspanAuto === 1) {
+  //       tableParameterAll["colspan"] = String(Math.floor(cellCount.length / 2));
+  //     }
+
+  //     tableParameterAll["data"] =  doAnyThing + data;
+
+  //     return tableParameterAll;
+  //   };
+
+  //   const tableRegex =
+  //     /\n((?:(?:(?:(?:\|\|)+)|(?:\|[^|]+\|(?:\|\|)*))\n?(?:(?:(?!\|\|).)+))(?:(?:\|\||\|\|\n|(?:\|\|)+(?!\n)(?:(?:(?!\|\|).)+)\n*)*)\|\|)\n/s;
+  //   const tableSubRegex = /(\n?)((?:\|\|)+)((?:&lt;(?:(?:(?!&lt;|&gt;).)+)&gt;)*)((?:\n*(?:(?:(?:(?!\|\|).)+)\n*)+)|(?:(?:(?!\|\|).)*))/g;
+  //   const tableCaptionRegex = /^\|([^|]+)\|/;
+  //   let tableCountAll = (this.wikiText.match(tableRegex) || []).length * 2;
+
+  //   while (true) {
+  //     const tableData = this.wikiText.match(tableRegex);
+  //     let tableDataNew!: string;
+  //     if (tableCountAll < 0) {
+  //       console.log("Error: render table count overflow");
+  //       break;
+  //     } else if (!tableData) {
+  //       break;
+  //     } else {
+  //       const tableDataOriginal = tableData[0];
+  //       tableDataNew = tableData[1];
+
+  //       const tableCaption = tableDataNew.match(tableCaptionRegex);
+  //       let tableCaptionNew!: string;
+  //       if (tableCaption) {
+  //         tableCaptionNew = "<caption>" + tableCaption[1] + "</caption>";
+  //         tableDataNew = tableDataNew.replace(new RegExp(tableCaptionRegex, "g"), "||");
+  //       } else {
+  //         tableCaptionNew = "";
+  //       }
+
+  //       const tableParameter: { div: string; class: string; table: string; col: Record<string, string>; rowspan: Record<string, number>, tr: string; td: string; } = {
+  //         div: "",
+  //         class: "",
+  //         table: "",
+  //         tr: "",
+  //         td: "",
+  //         col: {},
+  //         rowspan: {},
+  //       };
+  //       let tableDataEnd = "";
+  //       let tableColNum = 0;
+  //       let tableTrChange = 0;
+
+  //       let match;
+  //       let results = [];
+
+  //       // exec()를 사용하여 모든 일치 항목을 찾기
+  //       while ((match = tableSubRegex.exec(tableDataNew)) !== null) {
+  //         results.push(match);
+  //       }
+
+  //       // Python 보정
+  //       results.forEach(array => array.splice(0, 1));
+
+  //       for (const tableSub of results) {
+  //         console.log(JSON.stringify(tableSub), JSON.stringify(tableSub[3]));
+  //         const tableDataIn = tableSub[3].replace(/^\n+/g, "");
+
+  //         if (tableSub[0] !== "" && tableTrChange === 1) {
+  //           tableColNum = 0;
+  //           tableDataEnd += '</tr><tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + '</tr>';
+
+  //           tableParameter["tr"] = ""
+  //           tableParameter["td"] = ""
+  //         }
+
+  //         const tableSubParameter = manageTableParameter(tableSub[1], tableSub[2], tableDataIn);
+  //         tableParameter["tr"] += tableSubParameter["tr"]
+
+  //         if (!tableParameter["rowspan"][tableColNum]) tableParameter["rowspan"][tableColNum] = 0;
+  //         else {
+  //           if (tableParameter["rowspan"][tableColNum] !== 0) {
+  //             tableParameter["rowspan"][tableColNum] -= 1;
+  //             tableColNum += Number(tableSubParameter["colspan"]);
+  //           }
+  //         }
+
+  //         if (tableSubParameter["rowspan"] !== "") {
+  //           const rowspanInt = Number(tableSubParameter["rowspan"]);
+  //           if (rowspanInt > 1) tableParameter["rowspan"][tableColNum] = rowspanInt - 1;
+  //         }
+
+  //         if (!tableParameter["col"][tableColNum]) tableParameter["col"][tableColNum] = "";
+
+  //         tableParameter["div"] += tableSubParameter["div"];
+  //         tableParameter["class"] = tableSubParameter["class"] !== "" ? tableSubParameter["class"] : tableParameter["class"];
+  //         tableParameter["table"] += tableSubParameter["table"];
+  //         tableParameter["col"][tableColNum] += tableSubParameter["col"];
+
+  //         if (tableSub[2] == "" && tableSub[3] == "") tableTrChange = 1;
+  //         else {
+  //           tableTrChange = 0;
+
+  //           tableParameter["td"] +=
+  //             '<td colspan="' +
+  //             tableSubParameter["colspan"] +
+  //             '" rowspan="' +
+  //             tableSubParameter["rowspan"] +
+  //             '" style="' +
+  //             tableParameter["col"][tableColNum] +
+  //             tableSubParameter["td"] +
+  //             '"><back_br>\n' +
+  //             tableSubParameter["data"] +
+  //             "\n<front_br></td>";
+  //         }
+
+  //         tableColNum += Number(tableSubParameter["colspan"]);
+  //       }
+
+  //       tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + '</tr>'
+
+  //       tableDataEnd =
+  //         '<table class="' + tableParameter["class"] + '" style="' + tableParameter["table"] + '">' + tableCaptionNew + tableDataEnd + "</table>";
+  //       tableDataEnd = '<div class="table_safe" style="' + tableParameter["div"] + '">' + tableDataEnd + "</div>";
+
+  //       this.wikiText = this.wikiText.replace(tableRegex, "\n<front_br>" + tableDataEnd + "\n");
+  //     }
+
+  //     tableCountAll -= 1;
+  //   }
+  // }
 
   // re.sub fix
   manageList() {
     const quoteRegex = /((?:\n&gt; *[^\n]*)+)\n/;
     let quoteCount = 0;
-    let quoteCountMax = (this.wikiText.match(quoteRegex) || []).length * 10;
+    let quoteCountMax = (this.renderData.match(quoteRegex) || []).length * 10;
     while (true) {
-      let quoteData = this.wikiText.match(quoteRegex);
+      let quoteData = this.renderData.match(quoteRegex);
       if (quoteCountMax < 0) break;
       else if (!quoteData) break;
       else {
@@ -1069,7 +1291,7 @@ try {
         let quoteDataEnd = this.doInterRender(quoteDataNew, this.docSet["docInclude"] + "opennamu_quote_" + quoteCount);
         const dataName = this.getToolDataStorage('<div>', "</div>", quoteDataOriginal);
 
-        this.wikiText = this.wikiText.replace(
+        this.renderData = this.renderData.replace(
           quoteRegex,
           "\n<blockquote><back_br>\n<" + dataName + ">" + quoteDataEnd + "</" + dataName + "><front_br></blockquote>\n"
         );
@@ -1303,9 +1525,9 @@ try {
     }
 
     const listRegex = /((?:\n( *)(?:(\*)) ?([^\n]*))+|(?:\n( *)(?:(1|a|A|I|i)\.(?:#([0-9]*))?) ?([^\n]*)){2,})\n/;
-    let listCountMax = (this.wikiText.match(listRegex) || []).length * 3;
+    let listCountMax = (this.renderData.match(listRegex) || []).length * 3;
     while (true) {
-      const listData = this.wikiText.match(listRegex);
+      const listData = this.renderData.match(listRegex);
       let listDataNew!: string;
       if (listCountMax < 0) break;
       else if (!listData) break;
@@ -1314,7 +1536,7 @@ try {
         const listSubRegex = /\n( *)(?:(1|a|A|I|i)\.(?:#([0-9]*))?|(\*)) ?([^\n]*)/g;
         const listDataStr = listDataNew.replace(listSubRegex, intToMatch())
 
-        this.wikiText = this.wikiText.replace(listRegex, '\n<front_br><ul>' + listDataStr + "</ul><back_br>\n");
+        this.renderData = this.renderData.replace(listRegex, '\n<front_br><ul>' + listDataStr + "</ul><back_br>\n");
       }
 
       listCountMax -= 1;
@@ -1499,7 +1721,7 @@ try {
       }
     };
 
-    this.wikiText = this.wikiText.replace(/\[([^[(\]]+)\(((?:(?!\)\]).)+)\)\]/g, manageMacroDouble);
+    this.renderData = this.renderData.replace(/\[([^[(\]]+)\(((?:(?!\)\]).)+)\)\]/g, manageMacroDouble);
 
     const manageMacroSingle = (match: string, p1: string) => {
       const matchOriginal = match;
@@ -1535,23 +1757,23 @@ try {
     };
 
     // single macro replace
-    this.wikiText = this.wikiText.replace(/\[([^[\]]+)\]/g, manageMacroSingle);
+    this.renderData = this.renderData.replace(/\[([^[\]]+)\]/g, manageMacroSingle);
 
     // macro safe restore
-    this.wikiText = this.wikiText.replaceAll("<macro>", "[");
-    this.wikiText = this.wikiText.replaceAll("</macro>", "]");
+    this.renderData = this.renderData.replaceAll("<macro>", "[");
+    this.renderData = this.renderData.replaceAll("</macro>", "]");
   }
 
   // re.sub fix
   manageLink() {
-    this.wikiText = this.wikiText.replaceAll("[[]]", "");
+    this.renderData = this.renderData.replaceAll("[[]]", "");
 
     const linkRegex = /\[\[((?:(?!\[\[|\]\]|\||<|>).|<(?:\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>)+)(?:\|((?:(?!\[\[|\]\]|\|).)+))?\]\](\n?)/;
     let imageCount = 0;
 
-    let linkCountAll = (this.wikiText.match(linkRegex) || []).length * 4;
+    let linkCountAll = (this.renderData.match(globalRegExp(linkRegex)) || []).length * 4;
     while (true) {
-      const linkData = this.wikiText.match(linkRegex);
+      const linkData = this.renderData.match(linkRegex);
       if (!linkData) break;
       else if (linkCountAll < 0) {
         console.log("Error: render link count overflow");
@@ -1715,7 +1937,7 @@ try {
               "</a>",
               linkDataFull
             );
-            this.wikiText = this.wikiText.replace(linkRegex, `<${dataName}></${dataName}>`);
+            this.renderData = this.renderData.replace(linkRegex, `<${dataName}></${dataName}>`);
           } else {
             let filePass = 0;
             if (fileTurn !== "") {
@@ -1748,7 +1970,7 @@ try {
               dataName = this.getToolDataStorage("", "", linkDataFull);
             }
 
-            this.wikiText = this.wikiText.replace(linkRegex, `<${dataName}></${dataName}>` + linkData[2]);
+            this.renderData = this.renderData.replace(linkRegex, `<${dataName}></${dataName}>` + linkData[2]);
           }
         }
         // category 처리
@@ -1807,7 +2029,7 @@ try {
             this.dataCategory += `<a class="${categoryBlur} ${linkExist}" title="${linkSub}" href="/w/category:${linkMain}">${linkSub}</a>`;
           }
 
-          this.wikiText = this.wikiText.replace(linkRegex, "");
+          this.renderData = this.renderData.replace(linkRegex, "");
         }
         // inter link 처리 (미구현/오픈나무 전용 문법)
         else if (/^(?:inter|인터):([^:]+):/i.test(linkMain)) {
@@ -1838,7 +2060,7 @@ try {
           linkMain = urlPas(linkMain);
 
           // 미구현: 인터위키
-          this.wikiText = this.wikiText.replace(linkRegex, linkData[2]);
+          this.renderData = this.renderData.replace(linkRegex, linkData[2]);
         }
         // out link 처리
         else if (/^https?:\/\//i.test(linkMain)) {
@@ -1862,7 +2084,7 @@ try {
             "",
             linkDataFull
           );
-          this.wikiText = this.wikiText.replace(linkRegex, `<${dataName}>${linkSub}</${dataName}>` + addStr);
+          this.renderData = this.renderData.replace(linkRegex, `<${dataName}>${linkSub}</${dataName}>` + addStr);
         }
         // in link 처리
         else {
@@ -1934,7 +2156,7 @@ try {
             "",
             linkDataFull
           );
-          this.wikiText = this.wikiText.replace(linkRegex, `<${dataName}>${linkSub}</${dataName}>` + addStr);
+          this.renderData = this.renderData.replace(linkRegex, `<${dataName}>${linkSub}</${dataName}>` + addStr);
         }
       }
 
@@ -1951,12 +2173,12 @@ try {
     const useViewRealFootnoteNum = this.config.useViewRealFootnoteNum;
 
     const footnoteRegex = /(?:\[\*((?:(?!\[\*|\]| ).)+)?(?: ((?:(?!\[\*|\]).)+))?\]|\[(각주|footnote)\])/i;
-    let footnoteCountAll = (this.wikiText.match(footnoteRegex) || []).length * 4;
+    let footnoteCountAll = (this.renderData.match(globalRegExp(footnoteRegex)) || []).length * 4;
 
     while (true) {
       footnoteNum += 1;
 
-      const footnoteData = footnoteRegex.exec(this.wikiText);
+      const footnoteData = footnoteRegex.exec(this.renderData);
       if (footnoteCountAll < 0) {
         break;
       } else if (!footnoteData) {
@@ -1966,7 +2188,7 @@ try {
         const footnoteDataGroups = footnoteData.slice(1);
 
         if (footnoteDataGroups[2]) {
-          this.wikiText = this.wikiText.replace(footnoteRegex, () => this.getToolFootnoteMake());
+          this.renderData = this.renderData.replace(footnoteRegex, () => this.getToolFootnoteMake());
         } else {
           const footnoteNumStr = String(footnoteNum);
 
@@ -2113,15 +2335,15 @@ try {
             );
           }
 
-          this.wikiText = this.wikiText.replace(footnoteRegex, `<${dataName}></${dataName}>`);
+          this.renderData = this.renderData.replace(footnoteRegex, `<${dataName}></${dataName}>`);
         }
 
         footnoteCountAll -= 1;
       }
     }
 
-    this.wikiText += "<footnote_category>";
-    this.wikiText += this.getToolFootnoteMake();
+    this.renderData += "<footnote_category>";
+    this.renderData += this.getToolFootnoteMake();
   }
 
   // re.sub fix
@@ -2144,7 +2366,7 @@ try {
     };
 
     // <b>
-    this.wikiText = this.wikiText.replace(/&#039;&#039;&#039;((?:(?!&#039;&#039;&#039;).)+)&#039;&#039;&#039;/g, doRenderTextBold);
+    this.renderData = this.renderData.replace(/&#x27;&#x27;&#x27;((?:(?!&#x27;&#x27;&#x27;).)+)&#x27;&#x27;&#x27;/g, doRenderTextBold);
 
     // <i> function
     const doRenderTextItalic = (match: string, p1: string) => {
@@ -2154,7 +2376,7 @@ try {
     };
 
     // <i>
-    this.wikiText = this.wikiText.replace(/&#039;&#039;((?:(?!&#039;&#039;).)+)&#039;&#039;/g, doRenderTextItalic);
+    this.renderData = this.renderData.replace(/&#x27;&#x27;((?:(?!&#x27;&#x27;).)+)&#x27;&#x27;/g, doRenderTextItalic);
 
     // <u> function
     const doRenderTextUnder = (match: string, p1: string) => {
@@ -2164,7 +2386,7 @@ try {
     };
 
     // <u>
-    this.wikiText = this.wikiText.replace(/__((?:(?!__).)+)__/g, doRenderTextUnder);
+    this.renderData = this.renderData.replace(/__((?:(?!__).)+)__/g, doRenderTextUnder);
 
     // <sup> function
     const doRenderTextSup = (match: string, p1: string) => {
@@ -2174,9 +2396,9 @@ try {
     };
 
     // <sup>
-    this.wikiText = this.wikiText.replace(/\^\^\^((?:(?!\^\^\^).)+)\^\^\^/g, doRenderTextSup);
+    this.renderData = this.renderData.replace(/\^\^\^((?:(?!\^\^\^).)+)\^\^\^/g, doRenderTextSup);
     // <sup> 2
-    this.wikiText = this.wikiText.replace(/\^\^((?:(?!\^\^).)+)\^\^/g, doRenderTextSup);
+    this.renderData = this.renderData.replace(/\^\^((?:(?!\^\^).)+)\^\^/g, doRenderTextSup);
 
     // <sub> function
     const doRenderTextSub = (match: string, p1: string) => {
@@ -2186,9 +2408,9 @@ try {
     };
 
     // <sub>
-    this.wikiText = this.wikiText.replace(/,,,(?:(?!,,,).)+,,,/g, doRenderTextSub);
+    this.renderData = this.renderData.replace(/,,,(?:(?!,,,).)+,,,/g, doRenderTextSub);
     // <sub> 2
-    this.wikiText = this.wikiText.replace(/,(?:(?!,,).)+,/g, doRenderTextSub);
+    this.renderData = this.renderData.replace(/,,((?:(?!,,).)+),,/g, doRenderTextSub);
 
     // <s> function
     const doRenderTextStrike = (match: string, p1: string) => {
@@ -2208,24 +2430,24 @@ try {
     };
 
     // <s>
-    this.wikiText = this.wikiText.replace(/--((?:(?!--).)+)--/g, doRenderTextStrike);
+    this.renderData = this.renderData.replace(/--((?:(?!--).)+)--/g, doRenderTextStrike);
     // <s> 2
-    this.wikiText = this.wikiText.replace(/~~((?:(?!~~).)+)~~/g, doRenderTextStrike);
+    this.renderData = this.renderData.replace(/~~((?:(?!~~).)+)~~/g, doRenderTextStrike);
   }
 
   // re.sub fix
   manageHr() {
     const hrRegex = /\n-{4,9}\n/;
-    let hrCountMax = (this.wikiText.match(new RegExp(hrRegex, "g")) || []).length * 3;
+    let hrCountMax = (this.renderData.match(new RegExp(hrRegex, "g")) || []).length * 3;
 
     while (true) {
-      const hrData = hrRegex.exec(this.wikiText);
+      const hrData = hrRegex.exec(this.renderData);
       if (hrCountMax < 0) {
         break;
       } else if (!hrData) {
         break;
       } else {
-        this.wikiText = this.wikiText.replace(hrRegex, "\n<front_br><hr><back_br>\n");
+        this.renderData = this.renderData.replace(hrRegex, "\n<front_br><hr><back_br>\n");
       }
 
       hrCountMax -= 1;
@@ -2238,14 +2460,14 @@ try {
 
     // make heading base
     const headingRegex = /\n((={1,6})(#?) ?([^\n]+))\n/;
-    let headingCountAll = (this.wikiText.match(headingRegex) || []).length * 3;
+    let headingCountAll = (this.renderData.match(globalRegExp(headingRegex)) || []).length * 3;
     let headingStack = [0, 0, 0, 0, 0, 0];
     let headingCount = 0;
 
     while (true) {
       headingCount += 1;
 
-      const headingData = headingRegex.exec(this.wikiText);
+      const headingData = headingRegex.exec(this.renderData);
       if (!headingData) {
         break;
       } else if (headingCountAll < 0) {
@@ -2273,7 +2495,7 @@ try {
             headingDataAll = headingDataAll.replace(headingRestoreRegex, `<heading_${forAStr}>`);
           }
 
-          this.wikiText = this.wikiText.replace(headingRegex, `\n${headingDataAll}\n`);
+          this.renderData = this.renderData.replace(headingRegex, `\n${headingDataAll}\n`);
         } else {
           const headingLevel = headingDataGroups[1].length;
           const headingLevelStr = headingLevel.toString();
@@ -2339,7 +2561,7 @@ try {
             this.docSet["docInclude"]
           }opennamuHeading_${headingCount}" style="display: ${headingFolding[1]};"><back_br>\n`;
 
-          this.wikiText = this.wikiText.replace(headingRegex, headingDataComplete);
+          this.renderData = this.renderData.replace(headingRegex, headingDataComplete);
         }
       }
 
@@ -2347,13 +2569,13 @@ try {
     }
 
     // heading id adjust
-    const headingEndCount = (this.wikiText.match(/<heading_stack>/g) || []).length;
+    const headingEndCount = (this.renderData.match(/<heading_stack>/g) || []).length;
     for (let forA = 5; forA >= 0; forA--) {
       const headingEndStackRegex = new RegExp(`<heading_stack>${"0\\.".repeat(forA)}`, "g");
 
-      const headingEndMatchCount = (this.wikiText.match(headingEndStackRegex) || []).length;
+      const headingEndMatchCount = (this.renderData.match(headingEndStackRegex) || []).length;
       if (headingEndMatchCount === headingEndCount) {
-        this.wikiText = this.wikiText.replace(headingEndStackRegex, "<heading_stack>");
+        this.renderData = this.renderData.replace(headingEndStackRegex, "<heading_stack>");
         break;
       }
     }
@@ -2365,14 +2587,14 @@ try {
     let match;
     const results: RegExpExecArray[] = [];
 
-    while ((match = headingIdRegexGlobal.exec(this.wikiText)) !== null) {
+    while ((match = headingIdRegexGlobal.exec(this.renderData)) !== null) {
       results.push(match);
     }
 
     for (let index = 0; index < results.length; index++) {
       const result = results[index];
       const content = `<a href="#toc" id="s-${result[1]}">${result[1]}.</a>`;
-      this.wikiText = this.wikiText.replace(headingIdRegex, content);
+      this.renderData = this.renderData.replace(headingIdRegex, content);
       tocList[index][0] = result[1];
     }
 
@@ -2380,7 +2602,7 @@ try {
     for (let forA = 1; forA <= 6; forA++) {
       const forAStr = forA.toString();
       const headingRestoreRegex = new RegExp(`<heading_${forAStr}>`, "g");
-      this.wikiText = this.wikiText.replace(headingRestoreRegex, "=".repeat(forA));
+      this.renderData = this.renderData.replace(headingRestoreRegex, "=".repeat(forA));
     }
 
     // make toc
@@ -2400,15 +2622,15 @@ try {
     if (tocData !== "") {
       tocData += "</div>";
       this.dataToc = tocData;
-      this.wikiText += `<toc_data>${tocData}</toc_data>`;
+      this.renderData += `<toc_data>${tocData}</toc_data>`;
     } else {
       this.dataToc = "";
     }
   }
 
   finalize() {
-    this.wikiText = this.wikiText.replaceAll("<no_br>", "\n")
-    this.wikiText = this.wikiText.replaceAll("<no_td>", "||")
+    this.renderData = this.renderData.replaceAll("<no_br>", "\n")
+    this.renderData = this.renderData.replaceAll("<no_td>", "||")
 
     // add category
     if (this.docSet["docType"] === "view") {
@@ -2417,31 +2639,31 @@ try {
         const useCategorySet = this.config.useCategorySet;
 
         if (useCategorySet === "bottom") {
-          if (/<footnote_category>/.test(this.wikiText)) {
-            this.wikiText = this.wikiText.replace(/<footnote_category>/, `<hr><${dataName}></${dataName}>`);
+          if (/<footnote_category>/.test(this.renderData)) {
+            this.renderData = this.renderData.replace(/<footnote_category>/, `<hr><${dataName}></${dataName}>`);
           } else {
-            this.wikiText += `<hr><${dataName}></${dataName}>`;
+            this.renderData += `<hr><${dataName}></${dataName}>`;
           }
         } else {
-          this.wikiText = this.wikiText.replace(/<footnote_category>/, "");
-          this.wikiText = `<${dataName}></${dataName}><hr class="main_hr">${this.wikiText}`;
+          this.renderData = this.renderData.replace(/<footnote_category>/, "");
+          this.renderData = `<${dataName}></${dataName}><hr class="main_hr">${this.renderData}`;
         }
       } else {
-        this.wikiText = this.wikiText.replace(/<footnote_category>/, "");
+        this.renderData = this.renderData.replace(/<footnote_category>/, "");
       }
     } else {
-      this.wikiText = this.wikiText.replace(/<footnote_category>/, "");
+      this.renderData = this.renderData.replace(/<footnote_category>/, "");
     }
 
     // remove front_br and back_br
-    this.wikiText = this.wikiText.replace(/\n?<front_br>/, "");
-    this.wikiText = this.wikiText.replace(/<back_br>\n?/, "");
+    this.renderData = this.renderData.replace(/\n?<front_br>/g, "");
+    this.renderData = this.renderData.replace(/<back_br>\n?/g, "");
 
     // \n to <br>
-    this.wikiText = this.wikiText.replace(/\n/g, "<br>");
+    this.renderData = this.renderData.replace(/\n/g, "<br>");
 
     // <render_n> restore
-    this.wikiText = this.getToolDataRestore(this.wikiText);
+    this.renderData = this.getToolDataRestore(this.renderData);
 
     // a fix
     this.tempALinkCount = 0;
@@ -2469,7 +2691,7 @@ try {
       }
     };
 
-    this.wikiText = this.wikiText.replace(/(<a(?: [^<>]*)?>|<\/a>)/g, handlerALink);
+    this.renderData = this.renderData.replace(/(<a(?: [^<>]*)?>|<\/a>)/g, handlerALink);
 
     const handlerTocFilter = (match: string, p1: string) => {
       let data = p1.split(" ");
@@ -2491,55 +2713,55 @@ try {
       data = data.replace(/<([^<>]*)>/g, handlerTocFilter);
 
       const headingRegex = /<h([1-6])>/;
-      const headingData = headingRegex.exec(this.wikiText);
+      const headingData = headingRegex.exec(this.renderData);
       if (headingData) {
         const headingLevel = headingData[1];
-        this.wikiText = this.wikiText.replace(headingRegex, `<h${headingLevel} id="${dataSub}">`);
+        this.renderData = this.renderData.replace(headingRegex, `<h${headingLevel} id="${dataSub}">`);
       }
 
       return data;
     };
 
     if (this.dataToc !== "") {
-      this.wikiText += "</div>";
+      this.renderData += "</div>";
       const tocSearchRegex = /<toc_data>((?:(?!<toc_data>|<\/toc_data>).)*)<\/toc_data>/;
       let tocDataOn = 0;
 
-      const tocData = this.wikiText.match(tocSearchRegex) || [];
+      const tocData = this.renderData.match(tocSearchRegex) || [];
       let tocDataNew = tocData ? tocData[1] : "";
       this.dataToc = tocDataNew;
       this.dataToc = this.dataToc.replace(/<toc_inside>((?:(?!<toc_inside>|<\/toc_inside>).)*)<\/toc_inside>/g, handlerToc);
 
       const useTocSet = this.config.useTocSet;
 
-      this.wikiText = this.wikiText.replace(new RegExp(tocSearchRegex), "");
+      this.renderData = this.renderData.replace(new RegExp(tocSearchRegex), "");
       if (useTocSet === "off") {
-        this.wikiText = this.wikiText.replace(/<toc_need_part>/g, "");
+        this.renderData = this.renderData.replace(/<toc_need_part>/g, "");
       } else {
-        if (this.wikiText.match(tocSearchRegex)) {
+        if (this.renderData.match(tocSearchRegex)) {
           tocDataOn = 1;
         }
 
         const tmpRegex = /<toc_need_part>/;
         for (let i = 0; i < 20; i++) {
-          this.wikiText = this.wikiText.replace(tmpRegex, this.dataToc);
+          this.renderData = this.renderData.replace(tmpRegex, this.dataToc);
         }
-        this.wikiText = this.wikiText.replace(/<toc_need_part>/g, "");
+        this.renderData = this.renderData.replace(/<toc_need_part>/g, "");
       }
 
-      if (this.docSet["docType"] !== "view" || this.wikiText.match(/<toc_no_auto>/) || useTocSet === "half_off" || useTocSet === "off" || tocDataOn === 1) {
-        this.wikiText = this.wikiText.replace(/<toc_no_auto>/g, "");
+      if (this.docSet["docType"] !== "view" || this.renderData.match(/<toc_no_auto>/) || useTocSet === "half_off" || useTocSet === "off" || tocDataOn === 1) {
+        this.renderData = this.renderData.replace(/<toc_no_auto>/g, "");
       } else {
-        this.wikiText = this.wikiText.replace(/(?<in><h[1-6] id="[^"]*">)/, `<br>${this.dataToc}$<in>`);
+        this.renderData = this.renderData.replace(/(?<in><h[1-6] id="[^"]*">)/, `<br>${this.dataToc}$<in>`);
       }
     } else {
-      this.wikiText = this.wikiText.replace(/<toc_need_part>/g, "");
-      this.wikiText = this.wikiText.replace(/<toc_no_auto>/g, "");
+      this.renderData = this.renderData.replace(/<toc_need_part>/g, "");
+      this.renderData = this.renderData.replace(/<toc_no_auto>/g, "");
     }
 
     const handlerFootnote = (match: string, p1: string) => {
       const findRegex = new RegExp('<footnote_title id="' + p1 + '">((?:(?!<footnote_title|</footnote_title>).)*)</footnote_title>');
-      let findData = this.wikiText.match(findRegex);
+      let findData = this.renderData.match(findRegex);
       let findDataNew!: string;
       if (findData) {
         findDataNew = findData[1];
@@ -2551,7 +2773,7 @@ try {
       return '<a title="' + findDataNew + '"';
     };
 
-    this.wikiText = this.wikiText.replace(/<a fn_target="([^"]+)"/, handlerFootnote);
+    this.renderData = this.renderData.replace(/<a fn_target="([^"]+)"/, handlerFootnote);
 
     this.renderDataJS += `document.querySelectorAll('details').forEach((el) => {new Accordion(el);});if(window.location.hash !== '' && document.getElementById(window.location.hash.replace(/^#/, ''))) {document.getElementById(window.location.hash.replace(/^#/, '')).focus();}\nopennamu_do_ip_render();\n`;
   }
@@ -2583,8 +2805,8 @@ try {
       this.manageHeading();
       this.finalize();
     } else {
-      this.wikiText = this.wikiText.replace(/\|\|/g, "<no_td>")
-      this.wikiText = this.wikiText.replace(/\n/g, "<no_br>")
+      this.renderData = this.renderData.replace(/\|\|/g, "<no_td>")
+      this.renderData = this.renderData.replace(/\n/g, "<no_br>")
     }
 
     const dataBacklinkDict = this.dataBacklink;
@@ -2596,7 +2818,7 @@ try {
     }
 
     return [
-      this.wikiText,
+      this.renderData,
       this.renderDataJS,
       {
         backlink: dataBacklinkList,
