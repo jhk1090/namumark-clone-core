@@ -374,72 +374,138 @@ export class NamuMark {
     let includeNum = 0;
     const useIncludeLink = this.config.useIncludeLink;
     const includeRegex = /\[include\(((?:(?!\[include\(|\)\]|<\/div>).)+)\)\](\n?)/i;
-    let includeCountMax = (this.renderData.match(includeRegex) || []).length * 10;
+    let includeCountMax = (this.renderData.match(globalRegExp(includeRegex)) || []).length * 10;
     while (true) {
       includeNum += 1;
       const includeChangeList: Record<string, string> = {};
-      let match = this.renderData.match(includeRegex);
+      let includeMatch = this.renderData.match(includeRegex);
       if (includeCountMax < 0) {
         break;
-      } else if (!match) {
+      } else if (!includeMatch) {
         break;
-      } else {
-        if (this.docSet["docType"] === "include") {
-          this.renderData = this.renderData.replace(includeRegex, "");
-        } else {
-          const matchOriginal = match[0];
-          const macroSplitRegex = /(?:^|,) *([^,]+)/;
-          const macroSplitSubRegex = /^([^=]+) *= *(.*)$/;
-          let includeName = "";
+      }
+      // } else {
+      //   if (this.docSet["docType"] === "include") {
+      //     this.renderData = this.renderData.replace(includeRegex, "");
+      //   } else {
+      //     const matchOriginal = match[0];
+      //     const macroSplitRegex = /(?:^|,) *([^,]+)/;
+      //     const macroSplitSubRegex = /^([^=]+) *= *(.*)$/;
+      //     let includeName = "";
 
-          let data = match[1].match(new RegExp(macroSplitRegex, "g")) || [];
-          for (const datum of data) {
-            const dataSub = datum.match(macroSplitSubRegex);
-            if (dataSub) {
-              const dataSubName = dataSub[1];
-              let dataSubData = this.getToolDataRestore(dataSub[2], "slash")
-              dataSubData = escapeHtml(dataSubData);
-              dataSubData
-                .replace(/^(?<in>분류|category):/g, ":$<in>")
-                .replace(/^(?<in>파일|file):/g, ":$<in>")
+      //     let data = match[1].match(new RegExp(macroSplitRegex, "g")) || [];
+      //     for (const datum of data) {
+      //       const dataSub = datum.match(macroSplitSubRegex);
+      //       if (dataSub) {
+      //         const dataSubName = dataSub[1];
+      //         let dataSubData = this.getToolDataRestore(dataSub[2], "slash")
+      //         dataSubData = escapeHtml(dataSubData);
+      //         dataSubData
+      //           .replace(/^(?<in>분류|category):/g, ":$<in>")
+      //           .replace(/^(?<in>파일|file):/g, ":$<in>")
 
-              includeChangeList[dataSubName] = dataSubData;
-            } else {
-              includeName = datum;
-            }
-          }
+      //         includeChangeList[dataSubName] = dataSubData;
+      //       } else {
+      //         includeName = datum;
+      //       }
+      //     }
 
-          const includeNameOriginal = includeName;
-          includeName = unescapeHtml(this.getToolDataRestore(includeName, "slash"));
+      //     const includeNameOriginal = includeName;
+      //     includeName = unescapeHtml(this.getToolDataRestore(includeName, "slash"));
 
-          if (!this.dataBacklink[includeName])
-            this.dataBacklink[includeName] = {};
+      //     if (!this.dataBacklink[includeName])
+      //       this.dataBacklink[includeName] = {};
         
-          this.dataBacklink[includeName]["include"] = "";
+      //     this.dataBacklink[includeName]["include"] = "";
 
-          // FIXME: no db!
-          const dbData = this.database.data.find((value) => value.title === includeName)?.data;
-          let dataName!: string;
-          if (dbData) {
-            let includeLink = "";
-            const useIncludeLink = this.config.useIncludeLink
-            if (useIncludeLink === 'use')
-              includeLink = '<div><a href="/w/' + urlPas(includeName) + '">(' + includeNameOriginal + ')</a></div>'
+      //     // FIXME: no db!
+      //     const dbData = this.database.data.find((value) => value.title === includeName)?.data;
+      //     let dataName!: string;
+      //     if (dbData) {
+      //       let includeLink = "";
+      //       const useIncludeLink = this.config.useIncludeLink
+      //       if (useIncludeLink === 'use')
+      //         includeLink = '<div><a href="/w/' + urlPas(includeName) + '">(' + includeNameOriginal + ')</a></div>'
 
-            let includeSubName = this.docSet['docInclude'] + 'opennamu_include_' + (includeNum);
-            this.renderDataJS += 'opennamu_do_include("' + this.getToolJSSafe(includeName) + '", "' + this.getToolJSSafe(this.docName) + '", "' + this.getToolJSSafe(includeSubName) + '", "' + this.getToolJSSafe(includeSubName) + '");\n'
+      //       let includeSubName = this.docSet['docInclude'] + 'opennamu_include_' + (includeNum);
+      //       this.renderDataJS += 'opennamu_do_include("' + this.getToolJSSafe(includeName) + '", "' + this.getToolJSSafe(this.docName) + '", "' + this.getToolJSSafe(includeSubName) + '", "' + this.getToolJSSafe(includeSubName) + '");\n'
 
-            dataName = this.getToolDataStorage(`${includeLink}<div id="${includeSubName}" style="display: none">${encodeURIComponent(JSON.stringify(includeChangeList))}</div>`, "", matchOriginal);
-          } else {
-            this.dataBacklink[includeName]["no"] = "";
+      //       dataName = this.getToolDataStorage(`${includeLink}<div id="${includeSubName}" style="display: none">${encodeURIComponent(JSON.stringify(includeChangeList))}</div>`, "", matchOriginal);
+      //     } else {
+      //       this.dataBacklink[includeName]["no"] = "";
 
-            let includeLink = '<div><a class="opennamu_not_exist_link" href="/w/' + urlPas(includeName) + '">(' + includeNameOriginal + ")</a></div>";
-            dataName = this.getToolDataStorage(includeLink, "", matchOriginal);
-          }
+      //       let includeLink = '<div><a class="opennamu_not_exist_link" href="/w/' + urlPas(includeName) + '">(' + includeNameOriginal + ")</a></div>";
+      //       dataName = this.getToolDataStorage(includeLink, "", matchOriginal);
+      //     }
 
-          this.renderData = this.renderData.replace(includeRegex, `<${dataName}></${dataName}>` + match[1]);
+      //     this.renderData = this.renderData.replace(includeRegex, `<${dataName}></${dataName}>` + match[1]);
+      //   }
+      // }
+
+      if (this.docSet['docType'] === "include") {
+        this.renderData = this.renderData.replace(includeRegex, "");
+        includeCountMax -= 1;
+        continue;
+      }
+
+      const matchOrg = includeMatch[0]
+      let match = includeMatch.slice(1);
+
+      const macroSplitRegex = /(?:^|,) *([^,]+)/
+      const macroSplitSubRegex = /^([^=]+) *= *(.*)$/
+
+      let includeName = "";
+
+      let data = match[0].match(globalRegExp(macroSplitRegex)) || [];
+      for (const datum of data) {
+        const dataSubMatch = datum.match(macroSplitSubRegex);
+        if (dataSubMatch) {
+          const dataSub = dataSubMatch.slice(1);
+
+          const dataSubName = dataSub[0];
+          let dataSubData = this.getToolDataRestore(dataSub[1], "slash");
+          dataSubData = escapeHtml(dataSubData);
+
+          dataSubData = dataSubData.replace(/^(?<in>분류|category):/g, ':$<in>:')
+          dataSubData = dataSubData.replace(/^(?<in>파일|file):/g, ':$<in>:')
+
+          includeChangeList[dataSubName] = dataSubData
+        } else {
+          includeName = datum;
         }
       }
+
+      const includeNameOrg = includeName;
+      includeName = this.getToolDataRestore(includeName, "slash");
+      includeName = escapeHtml(includeName);
+
+      if (!this.dataBacklink[includeName]) {
+        this.dataBacklink[includeName] = {}
+      }
+
+      this.dataBacklink[includeName]["include"] = "";
+
+      const result = this.database.data.find(v => v.title === includeName)?.title;
+      let dataName!: string;
+      if (result) {
+        // include link func
+        let includeLink = "";
+        if (useIncludeLink === "use") {
+          includeLink = '<div><a href="/w/' + urlPas(includeName) + '">(' + includeNameOrg + ')</a></div>';
+        }
+
+        const includeSubName = this.docSet['docInclude'] + 'opennamu_include_' + includeNum;
+        this.renderDataJS += 'opennamu_do_include("' + this.getToolJSSafe(includeName) + '", "' + this.getToolJSSafe(this.docName) + '", "' + this.getToolJSSafe(includeSubName) + '", "' + this.getToolJSSafe(includeSubName) + '");\n'
+
+        dataName = this.getToolDataStorage('' + includeLink + '<div id="' + includeSubName + '" style="display: none;">' + encodeURIComponent(JSON.stringify(includeChangeList)) + '</div>' + '', '', matchOrg)
+      } else {
+        this.dataBacklink[includeName]["no"] = "";
+        const includeLink = '<div><a class="opennamu_not_exist_link" href="/w/' + urlPas(includeName) + '">(' + includeNameOrg + ')</a></div>';
+
+        dataName = this.getToolDataStorage(includeLink, "", matchOrg);
+      }
+
+      this.renderData = this.renderData.replace(includeRegex, '<' + dataName + '></' + dataName + '>' + match[1])
 
       includeCountMax -= 1;
     }
