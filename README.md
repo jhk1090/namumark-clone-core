@@ -23,12 +23,12 @@ code | 구현(v3.5.0-v188)
 this.manageIncludeDefault(); | x
 this.manageSlash(); | x
 this.manageMiddle(); | o
-this.manageInclude(); | x
+this.manageInclude(); | o
 this.manageMath(); | x
 this.manageTable(); | o
-this.manageList(); | x
-this.manageMacro(); | x
-this.manageLink(); | x
+this.manageList(); | o
+this.manageMacro(); | o
+this.manageLink(); | o
 this.manageText(); | x
 this.manageHr(); | x
 this.manageFootnote(); | x
@@ -37,5 +37,4 @@ this.finalize(); | o
 
 ### 현재 문제점
 
- * include 제대로 안됨: 재구현 필요
  * link 제대로 안됨: 재구현 필요

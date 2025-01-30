@@ -1,30 +1,5 @@
-import crypto, { randomUUID } from "node:crypto";
 import { v4 } from "uuid";
-
-const urlPas = (data: string) => {
-  return encodeURIComponent(data.replace(/^\./g, "\\\\.")).replaceAll("/", "%2F");
-};
-
-function sha224Replace(data: string) {
-  return crypto.createHash("sha224").update(data, "utf-8").digest("hex");
-}
-
-function escapeHtml(text: string) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
-}
-
-function unescapeHtml(html: string) {
-  return html
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'");
-}
-
-const globalRegExp = (regexp: RegExp) => {
-  return new RegExp(regexp, "g");
-}
+import { escapeHtml, globalRegExp, sha224Replace, unescapeHtml, urlPas } from "./misc";
 
 interface IDatabase {
   data: { data: string; title: string }[];
@@ -32,7 +7,7 @@ interface IDatabase {
 
 interface IDocSet {
   docInclude: string;
-  docType: 'view' | 'from' | 'thread' | 'include';
+  docType: "view" | "from" | "thread" | "include";
 }
 interface IConfig {
   docName: string;
@@ -56,10 +31,40 @@ interface IConfig {
   useViewJoke?: "default" | "off" | "on";
   useMathScroll?: "default" | "off" | "on";
   useViewHistory?: "default" | "off" | "on";
-  useFontSize?: "default" | "10" | "12" | "14" | "16" | "18" | "20" | "22"
+  useFontSize?: "default" | "10" | "12" | "14" | "16" | "18" | "20" | "22";
   useMonaco?: "default" | "normal" | "use";
 }
-const skinUseConfig = ["useStrike", "useBold", "useCategorySet", "useCategoryChangeTitle", "useFootnoteSet", "useFootnoteNumber", "useViewRealFootnoteNum", "useIncludeLink", "useImageSet", "useTocSet", "useExterLink", "useLinkDelimiter", "useCssDarkmode", "useTableScroll", "useTableTransparent", "useListViewChange", "useViewJoke", "useMathScroll", "useViewHistory", "useFontSize", "useMonaco"] as const;
+const skinUseConfig = [
+  "useStrike",
+  "useBold",
+  "useCategorySet",
+  "useCategoryChangeTitle",
+  "useFootnoteSet",
+  "useFootnoteNumber",
+  "useViewRealFootnoteNum",
+  "useIncludeLink",
+  "useImageSet",
+  "useTocSet",
+  "useExterLink",
+  "useLinkDelimiter",
+  "useCssDarkmode",
+  "useTableScroll",
+  "useTableTransparent",
+  "useListViewChange",
+  "useViewJoke",
+  "useMathScroll",
+  "useViewHistory",
+  "useFontSize",
+  "useMonaco",
+] as const;
+
+interface IAfterwork {
+  type: "folding";
+  value: IHeadingFolding;
+}
+interface IHeadingFolding {
+  indentifier: string;
+}
 export class NamuMark {
   renderData: string = "";
 
@@ -98,12 +103,14 @@ export class NamuMark {
   database!: IDatabase;
 
   tempALinkCount!: number;
-  
+
   doType!: "exter" | "inter";
 
-  linkCount = 0
+  linkCount = 0;
 
-  constructor(wikiText: string, config: IConfig, database: IDatabase, doType: "exter" | "inter"="exter") {
+  afterwork: IAfterwork[] = [];
+
+  constructor(wikiText: string, config: IConfig, database: IDatabase, doType: "exter" | "inter" = "exter") {
     this.doType = doType;
     this.renderData = wikiText.replace("\r", "");
     if (doType === "exter") {
@@ -111,21 +118,20 @@ export class NamuMark {
     }
 
     this.renderData = "<back_br>\n" + this.renderData + "\n<front_br>";
-    console.log(JSON.stringify(config))
+    console.log(JSON.stringify(config));
 
     config.docSet = { docInclude: v4().replaceAll("-", "") + "_", docType: "view" };
     type TOmitted = keyof Omit<Omit<IConfig, "docSet">, "docName">;
     for (const key of skinUseConfig) {
-      const value = config[key as TOmitted]
+      const value = config[key as TOmitted];
       if (!value) {
         config[key as TOmitted] = "default";
       }
     }
 
-    
     this.docSet = config.docSet;
     this.config = config;
-    
+
     this.database = database;
   }
 
@@ -294,7 +300,7 @@ export class NamuMark {
     return data; // 결과 값을 반환합니다.
   }
 
-  getToolLinkFix(linkMain: string, doType="link") {
+  getToolLinkFix(linkMain: string, doType = "link") {
     if (doType === "link") {
       if (linkMain === "../") {
         linkMain = this.docName;
@@ -320,22 +326,22 @@ export class NamuMark {
       }
     }
 
-    return linkMain
+    return linkMain;
   }
 
   doInterRender(data: string, docInclude: string): string {
-    const docSet = {...this.docSet}
-    docSet['docInclude'] = docInclude;
+    const docSet = { ...this.docSet };
+    docSet["docInclude"] = docInclude;
 
     const dataEnd = new NamuMark(data, { docName: this.docName, docSet: this.docSet }, this.database, "inter").parse();
     this.renderDataJS += dataEnd[1];
     this.dataCategoryList.push(...dataEnd[2]["category"]);
-    this.dataBacklink = {...this.dataBacklink, ...dataEnd[2]["backlink_dict"]}
-    this.dataTempStorage = {...this.dataTempStorage, ...dataEnd[2]["temp_storage"][0]}
-    this.dataTempStorageCount += dataEnd[2]["temp_storage"][1]
-    this.linkCount += dataEnd[2]["link_count"]
+    this.dataBacklink = { ...this.dataBacklink, ...dataEnd[2]["backlink_dict"] };
+    this.dataTempStorage = { ...this.dataTempStorage, ...dataEnd[2]["temp_storage"][0] };
+    this.dataTempStorageCount += dataEnd[2]["temp_storage"][1];
+    this.linkCount += dataEnd[2]["link_count"];
 
-    return dataEnd[0]
+    return dataEnd[0];
   }
 
   manageRemark() {
@@ -384,75 +390,18 @@ export class NamuMark {
       } else if (!includeMatch) {
         break;
       }
-      // } else {
-      //   if (this.docSet["docType"] === "include") {
-      //     this.renderData = this.renderData.replace(includeRegex, "");
-      //   } else {
-      //     const matchOriginal = match[0];
-      //     const macroSplitRegex = /(?:^|,) *([^,]+)/;
-      //     const macroSplitSubRegex = /^([^=]+) *= *(.*)$/;
-      //     let includeName = "";
 
-      //     let data = match[1].match(new RegExp(macroSplitRegex, "g")) || [];
-      //     for (const datum of data) {
-      //       const dataSub = datum.match(macroSplitSubRegex);
-      //       if (dataSub) {
-      //         const dataSubName = dataSub[1];
-      //         let dataSubData = this.getToolDataRestore(dataSub[2], "slash")
-      //         dataSubData = escapeHtml(dataSubData);
-      //         dataSubData
-      //           .replace(/^(?<in>분류|category):/g, ":$<in>")
-      //           .replace(/^(?<in>파일|file):/g, ":$<in>")
-
-      //         includeChangeList[dataSubName] = dataSubData;
-      //       } else {
-      //         includeName = datum;
-      //       }
-      //     }
-
-      //     const includeNameOriginal = includeName;
-      //     includeName = unescapeHtml(this.getToolDataRestore(includeName, "slash"));
-
-      //     if (!this.dataBacklink[includeName])
-      //       this.dataBacklink[includeName] = {};
-        
-      //     this.dataBacklink[includeName]["include"] = "";
-
-      //     // FIXME: no db!
-      //     const dbData = this.database.data.find((value) => value.title === includeName)?.data;
-      //     let dataName!: string;
-      //     if (dbData) {
-      //       let includeLink = "";
-      //       const useIncludeLink = this.config.useIncludeLink
-      //       if (useIncludeLink === 'use')
-      //         includeLink = '<div><a href="/w/' + urlPas(includeName) + '">(' + includeNameOriginal + ')</a></div>'
-
-      //       let includeSubName = this.docSet['docInclude'] + 'opennamu_include_' + (includeNum);
-      //       this.renderDataJS += 'opennamu_do_include("' + this.getToolJSSafe(includeName) + '", "' + this.getToolJSSafe(this.docName) + '", "' + this.getToolJSSafe(includeSubName) + '", "' + this.getToolJSSafe(includeSubName) + '");\n'
-
-      //       dataName = this.getToolDataStorage(`${includeLink}<div id="${includeSubName}" style="display: none">${encodeURIComponent(JSON.stringify(includeChangeList))}</div>`, "", matchOriginal);
-      //     } else {
-      //       this.dataBacklink[includeName]["no"] = "";
-
-      //       let includeLink = '<div><a class="opennamu_not_exist_link" href="/w/' + urlPas(includeName) + '">(' + includeNameOriginal + ")</a></div>";
-      //       dataName = this.getToolDataStorage(includeLink, "", matchOriginal);
-      //     }
-
-      //     this.renderData = this.renderData.replace(includeRegex, `<${dataName}></${dataName}>` + match[1]);
-      //   }
-      // }
-
-      if (this.docSet['docType'] === "include") {
+      if (this.docSet["docType"] === "include") {
         this.renderData = this.renderData.replace(includeRegex, "");
         includeCountMax -= 1;
         continue;
       }
 
-      const matchOrg = includeMatch[0]
+      const matchOrg = includeMatch[0];
       let match = includeMatch.slice(1);
 
-      const macroSplitRegex = /(?:^|,) *([^,]+)/
-      const macroSplitSubRegex = /^([^=]+) *= *(.*)$/
+      const macroSplitRegex = /(?:^|,) *([^,]+)/;
+      const macroSplitSubRegex = /^([^=]+) *= *(.*)$/;
 
       let includeName = "";
 
@@ -466,10 +415,10 @@ export class NamuMark {
           let dataSubData = this.getToolDataRestore(dataSub[1], "slash");
           dataSubData = escapeHtml(dataSubData);
 
-          dataSubData = dataSubData.replace(/^(?<in>분류|category):/g, ':$<in>:')
-          dataSubData = dataSubData.replace(/^(?<in>파일|file):/g, ':$<in>:')
+          dataSubData = dataSubData.replace(/^(?<in>분류|category):/g, ":$<in>:");
+          dataSubData = dataSubData.replace(/^(?<in>파일|file):/g, ":$<in>:");
 
-          includeChangeList[dataSubName] = dataSubData
+          includeChangeList[dataSubName] = dataSubData;
         } else {
           includeName = datum;
         }
@@ -480,32 +429,55 @@ export class NamuMark {
       includeName = escapeHtml(includeName);
 
       if (!this.dataBacklink[includeName]) {
-        this.dataBacklink[includeName] = {}
+        this.dataBacklink[includeName] = {};
       }
 
       this.dataBacklink[includeName]["include"] = "";
 
-      const result = this.database.data.find(v => v.title === includeName)?.title;
+      const result = this.database.data.find((v) => v.title === includeName);
       let dataName!: string;
       if (result) {
         // include link func
         let includeLink = "";
         if (useIncludeLink === "use") {
-          includeLink = '<div><a href="/w/' + urlPas(includeName) + '">(' + includeNameOrg + ')</a></div>';
+          includeLink = '<div><a href="/w/' + urlPas(includeName) + '">(' + includeNameOrg + ")</a></div>";
         }
 
-        const includeSubName = this.docSet['docInclude'] + 'opennamu_include_' + includeNum;
-        this.renderDataJS += 'opennamu_do_include("' + this.getToolJSSafe(includeName) + '", "' + this.getToolJSSafe(this.docName) + '", "' + this.getToolJSSafe(includeSubName) + '", "' + this.getToolJSSafe(includeSubName) + '");\n'
+        const includeSubName = this.docSet["docInclude"] + "opennamu_include_" + includeNum;
+        this.renderDataJS +=
+          'opennamu_do_include("' +
+          this.getToolJSSafe(includeName) +
+          '", "' +
+          this.getToolJSSafe(this.docName) +
+          '", "' +
+          this.getToolJSSafe(includeSubName) +
+          '", "' +
+          this.getToolJSSafe(includeSubName) +
+          '");\n';
 
-        dataName = this.getToolDataStorage('' + includeLink + '<div id="' + includeSubName + '" style="display: none;">' + encodeURIComponent(JSON.stringify(includeChangeList)) + '</div>' + '', '', matchOrg)
+        const mark = (new NamuMark(result.data, this.config, this.database)).parse()
+        dataName = this.getToolDataStorage(
+          "" +
+            includeLink +
+            '<div id="' +
+            includeSubName +
+            '" style="display: inline;">' +
+            // encodeURIComponent(JSON.stringify(includeChangeList)) +
+            mark[0] +
+            "</div>" +
+            "",
+          "",
+          matchOrg
+        );
+        this.renderDataJS += mark[1]
       } else {
         this.dataBacklink[includeName]["no"] = "";
-        const includeLink = '<div><a class="opennamu_not_exist_link" href="/w/' + urlPas(includeName) + '">(' + includeNameOrg + ')</a></div>';
+        const includeLink = '<div><a class="opennamu_not_exist_link" href="/w/' + urlPas(includeName) + '">(' + includeNameOrg + ")</a></div>";
 
         dataName = this.getToolDataStorage(includeLink, "", matchOrg);
       }
 
-      this.renderData = this.renderData.replace(includeRegex, '<' + dataName + '></' + dataName + '>' + match[1])
+      this.renderData = this.renderData.replace(includeRegex, "<" + dataName + "></" + dataName + ">" + match[1]);
 
       includeCountMax -= 1;
     }
@@ -543,14 +515,14 @@ export class NamuMark {
       const middleSlash = middleDataMatch[2];
       if (middleSlash) {
         if (this.dataTempStorage[middleSlash] !== "}") {
-          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
           this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
           continue;
         }
       }
 
       let middleData = middleDataMatch[1] || "";
-      const middleNameMatch = middleData.match(/^([^ \n]+)/)
+      const middleNameMatch = middleData.match(/^([^ \n]+)/);
       let middleDataPass = "";
       let middleDataAdd = "";
       let dataName = "";
@@ -561,9 +533,9 @@ export class NamuMark {
         }
 
         const dataRevert = this.getToolDataRevert(middleData).replace(/^\n/g, "").replace(/\n$/g, "");
-        
+
         dataName = this.getToolDataStorage(dataRevert, "", middleDataOrg);
-        this.renderData = this.renderData.replace(middleRegex, ('<' + dataName + '>' + middleDataPass + '</' + dataName + '>' + middleDataAdd));
+        this.renderData = this.renderData.replace(middleRegex, "<" + dataName + ">" + middleDataPass + "</" + dataName + ">" + middleDataAdd);
         middleCountAll -= 1;
         continue;
       }
@@ -572,7 +544,7 @@ export class NamuMark {
       if (middleName === "#!wiki") {
         if (middleSlash) {
           middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
-          this.renderData = this.renderData.replace(middleRegex, middleDataOrg)
+          this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
           continue;
         }
 
@@ -596,17 +568,15 @@ export class NamuMark {
               break;
             }
           }
-          
+
           if (wikiDataStyleMatch) {
             wikiDataStyle = wikiDataStyleMatch[1];
             if (wikiDataStyle) {
-              wikiDataStyle = wikiDataStyle.replaceAll('&#x27;', '')
-              wikiDataStyle = wikiDataStyle.replaceAll('&quot;', '')
+              wikiDataStyle = wikiDataStyle.replaceAll("&#x27;", "");
+              wikiDataStyle = wikiDataStyle.replaceAll("&quot;", "");
 
-              if (darkOnly == 1 && this.darkmode == '1')
-                  wikiDataStyleData += wikiDataStyle
-              else if (darkOnly == 0)
-                  wikiDataStyleData += wikiDataStyle
+              if (darkOnly == 1 && this.darkmode == "1") wikiDataStyleData += wikiDataStyle;
+              else if (darkOnly == 0) wikiDataStyleData += wikiDataStyle;
             } else {
               wikiDataStyle = "";
             }
@@ -619,8 +589,8 @@ export class NamuMark {
           / *box-shadow *: *(([^,;]*)(,|;|$)){10,}/,
           / *url\([^()]*\)/,
           / *linear-gradient\((([^(),]+)(,|\))){10,}/,
-          / *position *: */
-        ]
+          / *position *: */,
+        ];
 
         for (const regex of findRegex) {
           if (wikiDataStyleData.match(new RegExp(regex, "i"))) {
@@ -631,26 +601,30 @@ export class NamuMark {
 
         wikiData = this.getToolDataRevert(wikiData).replace(/(^\n|\n$)/g, "");
         interData["inter_data_" + interCount] = wikiData;
-        middleDataPass = '<inter_data_' + interCount + '>';
+        middleDataPass = "<inter_data_" + interCount + ">";
         interCount += 1;
 
-        dataName = this.getToolDataStorage('<div style="' + wikiDataStyleData + '">', '</div>', middleDataOrg);
+        dataName = this.getToolDataStorage('<div style="' + wikiDataStyleData + '">', "</div>", middleDataOrg);
         wikiCount += 1;
       } else if (middleName === "#!html") {
         let htmlData = middleData.replace(/^#!html( |\n)/g, "");
         if (middleSlash) {
-          htmlData += "\\"
+          htmlData += "\\";
         }
 
         const dataRevert = this.getToolDataRevert(htmlData).replace(/^\n/g, "").replace(/\n$/g, "").replaceAll("&amp;nbsp;", "&nbsp;");
 
-        this.renderDataJS += 'opennamu_do_render_html("' + this.docSet['docInclude'] + 'opennamu_wiki_' + htmlCount + '");\n'
+        this.renderDataJS += 'opennamu_do_render_html("' + this.docSet["docInclude"] + "opennamu_wiki_" + htmlCount + '");\n';
 
-        dataName = this.getToolDataStorage('<span id="' + this.docSet['docInclude'] + 'opennamu_wiki_' + htmlCount + '">' + dataRevert, '</span>', middleDataOrg);
+        dataName = this.getToolDataStorage(
+          '<span id="' + this.docSet["docInclude"] + "opennamu_wiki_" + htmlCount + '">' + dataRevert,
+          "</span>",
+          middleDataOrg
+        );
         htmlCount += 1;
       } else if (middleName === "#!folding") {
         if (middleSlash) {
-          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
           this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
           continue;
         }
@@ -670,18 +644,18 @@ export class NamuMark {
 
         wikiData = this.getToolDataRevert(wikiData).replace(/(^\n|\n$)/g, "");
         interData["inter_data_" + interCount] = wikiData;
-        let wikiDataEnd = '<inter_data_' + interCount + '>';
+        let wikiDataEnd = "<inter_data_" + interCount + ">";
         interCount += 1;
 
         middleDataPass = wikiDataFolding;
-        dataName = this.getToolDataStorage('<details><summary>', '</summary><div class="opennamu_folding">', middleDataOrg);
-        const dataName2 = this.getToolDataStorage('', '</div></details>', '');
-        middleDataAdd = '<' + dataName2 + '>' + wikiDataEnd + '</' + dataName2 + '>';
+        dataName = this.getToolDataStorage("<details><summary>", '</summary><div class="opennamu_folding">', middleDataOrg);
+        const dataName2 = this.getToolDataStorage("", "</div></details>", "");
+        middleDataAdd = "<" + dataName2 + ">" + wikiDataEnd + "</" + dataName2 + ">";
 
         foldingCount += 1;
       } else if (middleName === "#!syntax") {
         if (middleSlash) {
-          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
           this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
           continue;
         }
@@ -694,7 +668,7 @@ export class NamuMark {
         if (wikiDataSyntaxMatch) {
           wikiDataSyntax = wikiDataSyntaxMatch[1];
           if (!wikiDataSyntax) {
-            wikiDataSyntax = "python"
+            wikiDataSyntax = "python";
           } else if (wikiDataSyntax === "asm" || wikiDataSyntax === "assembly") {
             wikiDataSyntax = "x86arm";
           }
@@ -703,49 +677,38 @@ export class NamuMark {
         }
 
         if (syntaxCount === 0) {
-          this.renderDataJS += 'hljs.highlightAll();\n'
-          this.renderDataJS += 'hljs.initLineNumbersOnLoad();\n'
+          this.renderDataJS += `hljs.highlightAll(); hljs.initLineNumbersOnLoad();\n`
         }
 
-        dataName = this.getToolDataStorage('<pre id="syntax"><code class="' + wikiDataSyntax + '">' + wikiData, '</code></pre>', middleDataOrg)
+        dataName = this.getToolDataStorage('<pre id="syntax"><code class="' + wikiDataSyntax + '">' + wikiData, "</code></pre>", middleDataOrg);
         syntaxCount += 1;
-      
+
         // 오픈나무 전용 문법 제외: #!dark, #!white
-      } else if (['+5', '+4', '+3', '+2', '+1', '-5', '-4', '-3', '-2', '-1'].includes(middleName)) {
+      } else if (["+5", "+4", "+3", "+2", "+1", "-5", "-4", "-3", "-2", "-1"].includes(middleName)) {
         if (middleSlash) {
-          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
           this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
           continue;
         }
 
         let wikiData = middleData.replace(/^(\+|\-)[1-5]( |\n)/g, "");
         let wikiSize!: string;
-        if (middleName == '+5')
-            wikiSize = '200'
-        else if (middleName == '+4')
-            wikiSize = '180'
-        else if (middleName == '+3')
-            wikiSize = '160'
-        else if (middleName == '+2')
-            wikiSize = '140'
-        else if (middleName == '+1')
-            wikiSize = '120'
-        else if (middleName == '-5')
-            wikiSize = '50'
-        else if (middleName == '-4')
-            wikiSize = '60'
-        else if (middleName == '-3')
-            wikiSize = '70'
-        else if (middleName == '-2')
-            wikiSize = '80'
-        else
-            wikiSize = '90'
+        if (middleName == "+5") wikiSize = "200";
+        else if (middleName == "+4") wikiSize = "180";
+        else if (middleName == "+3") wikiSize = "160";
+        else if (middleName == "+2") wikiSize = "140";
+        else if (middleName == "+1") wikiSize = "120";
+        else if (middleName == "-5") wikiSize = "50";
+        else if (middleName == "-4") wikiSize = "60";
+        else if (middleName == "-3") wikiSize = "70";
+        else if (middleName == "-2") wikiSize = "80";
+        else wikiSize = "90";
 
         middleDataPass = wikiData;
-        dataName = this.getToolDataStorage('<span style="font-size:' + wikiSize + '%">', '</span>', middleDataOrg)
+        dataName = this.getToolDataStorage('<span style="font-size:' + wikiSize + '%">', "</span>", middleDataOrg);
       } else if (middleName.match(/^@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))/)) {
         if (middleSlash) {
-          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
           this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
           continue;
         }
@@ -761,7 +724,7 @@ export class NamuMark {
 
           if (wikiColorMatch[3]) {
             if (wikiColorMatch[4]) {
-              wikiColorData += ",#" + wikiColorMatch[4]
+              wikiColorData += ",#" + wikiColorMatch[4];
             } else if (wikiColorMatch[5]) {
               wikiColorData += "," + wikiColorMatch[5];
             }
@@ -776,10 +739,10 @@ export class NamuMark {
         const wikiData = middleData.replace(/^@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(?:,@(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?( |\n)/g, "");
 
         middleDataPass = wikiData;
-        dataName = this.getToolDataStorage('<span style="background-color:' + wikiColor + '">', '</span>', middleDataOrg);
+        dataName = this.getToolDataStorage('<span style="background-color:' + wikiColor + '">', "</span>", middleDataOrg);
       } else if (middleName.match(/^#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))/)) {
         if (middleSlash) {
-          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, '<temp_' + middleSlash + '>');
+          middleDataOrg = middleDataOrg.replace(/<(\/?(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<temp_" + middleSlash + ">");
           this.renderData = this.renderData.replace(middleRegex, middleDataOrg);
           continue;
         }
@@ -795,7 +758,7 @@ export class NamuMark {
 
           if (wikiColorMatch[3]) {
             if (wikiColorMatch[4]) {
-              wikiColorData += ",#" + wikiColorMatch[4]
+              wikiColorData += ",#" + wikiColorMatch[4];
             } else if (wikiColorMatch[5]) {
               wikiColorData += "," + wikiColorMatch[5];
             }
@@ -810,17 +773,17 @@ export class NamuMark {
         const wikiData = middleData.replace(/^#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+))(?:,#(?:((?:[0-9a-f-A-F]{3}){1,2})|(\w+)))?( |\n)/g, "");
 
         middleDataPass = wikiData;
-        dataName = this.getToolDataStorage('<span style="color:' + wikiColor + '">', '</span>', middleDataOrg);
+        dataName = this.getToolDataStorage('<span style="color:' + wikiColor + '">', "</span>", middleDataOrg);
       } else {
         if (middleSlash) {
           middleData += "\\";
         }
 
-        const dataRevert = this.getToolDataRevert(middleData).replace(/^\n/g, "").replace(/\n$/g, "")
+        const dataRevert = this.getToolDataRevert(middleData).replace(/^\n/g, "").replace(/\n$/g, "");
         dataName = this.getToolDataStorage(dataRevert, "", middleDataOrg);
       }
 
-      this.renderData = this.renderData.replace(middleRegex, ('<' + dataName + '>' + middleDataPass + '</' + dataName + '>' + middleDataAdd));
+      this.renderData = this.renderData.replace(middleRegex, "<" + dataName + ">" + middleDataPass + "</" + dataName + ">" + middleDataAdd);
       middleCountAll -= 1;
     }
     const interDataRegex = /<(inter_data_[0-9]+)>/g;
@@ -830,20 +793,22 @@ export class NamuMark {
         data = data.replace(interDataRegex, replaceSub);
 
         return data;
-      }
+      };
 
       return (match: string, ...groups: string[]) => {
         let data = interData[groups[0]];
         data = data.replace(interDataRegex, replaceSub);
 
-        data = this.doInterRender(data, this.docSet["docInclude"] + "opennamu_inter_render_" + interCount)
+        data = this.doInterRender(data, this.docSet["docInclude"] + "opennamu_inter_render_" + interCount);
         interCount += 1;
 
         return data;
-      }
-    }
+      };
+    };
 
-    this.renderData = this.renderData.replace(interDataRegex, replaceInterData()).replace(/'<temp_(?<in>(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<$<in>>")
+    this.renderData = this.renderData
+      .replace(interDataRegex, replaceInterData())
+      .replace(/'<temp_(?<in>(?:slash)_(?:[0-9]+)(?:[^<>]+))>/g, "<$<in>>");
   }
 
   // re.sub fix
@@ -864,7 +829,7 @@ try {
   katex.render("${data}", document.getElementById("${nameOb}"));
 } catch {
   if (document.getElementById("${nameOb}")) {
-      document.getElementById("${nameOb}").innerHTML = "<span style='color: red;'>" + ${dataHTML} + "</span>";
+      document.getElementById("${nameOb}").innerHTML = "<span style='color: red;'>${dataHTML}</span>";
   }
 }
       `;
@@ -880,8 +845,8 @@ try {
 
   // re.sub fix
   manageTable() {
-    this.renderData = this.renderData.replace(/\n +\|\|/g, '\n||');
-    
+    this.renderData = this.renderData.replace(/\n +\|\|/g, "\n||");
+
     const manageTableParameter = (cellCount: string, parameter: string, data: string) => {
       const tableParameterAll = { div: "", class: "", table: "", tr: "", td: "", col: "", colspan: "", rowspan: "", data: "" };
 
@@ -896,94 +861,67 @@ try {
       while ((match = tableParameterRegexGlobal.exec(parameter)) !== null) {
         tableParameterResults.push(match);
       }
-      tableParameterResults.forEach(array => array.splice(0, 1));
-      tableParameterResults = tableParameterResults.flat()
+      tableParameterResults.forEach((array) => array.splice(0, 1));
+      tableParameterResults = tableParameterResults.flat();
 
       for (const tableParameter of tableParameterResults) {
         const tableParameterSplit = tableParameter.split("=");
         let tableParameterData!: string;
         if (tableParameterSplit.length === 2) {
-          const tableParameterName = tableParameterSplit[0].replace(' ', "").toLowerCase();
+          const tableParameterName = tableParameterSplit[0].replace(" ", "").toLowerCase();
           tableParameterData = this.getToolCssSafe(tableParameterSplit[1]);
 
-          if (tableParameterName == 'tablebgcolor')
-              tableParameterAll['table'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'tablewidth') {
-            tableParameterAll['div'] += 'width:' + this.getToolPxAddCheck(tableParameterData) + ';'
-            tableParameterAll['table'] += 'width:100%;'
-          }
-          else if (tableParameterName == 'tableheight')
-              tableParameterAll['table'] += 'height:' + this.getToolPxAddCheck(tableParameterData) + ';'
-          else if (tableParameterName == 'tablealign') {
-            if (tableParameterData == 'right')
-                tableParameterAll['div'] += 'float:right;'
-            else if (tableParameterData == 'center') {
-              tableParameterAll['div'] += 'margin:auto;'
-              tableParameterAll['table'] += 'margin:auto;'
+          if (tableParameterName == "tablebgcolor") tableParameterAll["table"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "tablewidth") {
+            tableParameterAll["div"] += "width:" + this.getToolPxAddCheck(tableParameterData) + ";";
+            tableParameterAll["table"] += "width:100%;";
+          } else if (tableParameterName == "tableheight") tableParameterAll["table"] += "height:" + this.getToolPxAddCheck(tableParameterData) + ";";
+          else if (tableParameterName == "tablealign") {
+            if (tableParameterData == "right") tableParameterAll["div"] += "float:right;";
+            else if (tableParameterData == "center") {
+              tableParameterAll["div"] += "margin:auto;";
+              tableParameterAll["table"] += "margin:auto;";
             }
-          }
-          else if (tableParameterName == 'tableclass')
-              tableParameterAll['class'] = tableParameterSplit[1]
-          else if (tableParameterName == 'tabletextalign')
-              tableParameterAll['table'] += 'text-align:' + tableParameterData + ' !important;'
-          else if (tableParameterName == 'tablecolor')
-              tableParameterAll['table'] += 'color:' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'tablebordercolor')
-              tableParameterAll['table'] += 'border:2px solid ' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'rowbgcolor')
-              tableParameterAll['tr'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'rowtextalign')
-              tableParameterAll['tr'] += 'text-align:' + tableParameterData + ' !important;'
-          else if (tableParameterName == 'rowcolor')
-              tableParameterAll['tr'] += 'color:' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'colcolor')
-              tableParameterAll['col'] += 'color:' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'colbgcolor')
-              tableParameterAll['col'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'coltextalign')
-              tableParameterAll['col'] += 'text-align:' + tableParameterData + ' !important;'
-          else if (tableParameterName == 'bgcolor')
-              tableParameterAll['td'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'color')
-              tableParameterAll['td'] += 'color:' + this.getToolDarkModeSplit(tableParameterData) + ';'
-          else if (tableParameterName == 'width')
-              tableParameterAll['td'] += 'width:' + this.getToolPxAddCheck(tableParameterData) + ';'
-          else if (tableParameterName == 'height')
-              tableParameterAll['td'] += 'height:' + this.getToolPxAddCheck(tableParameterData) + ';'
-          else
-              doAnyThing += "&lt;" + tableParameter + "&gt;";
+          } else if (tableParameterName == "tableclass") tableParameterAll["class"] = tableParameterSplit[1];
+          else if (tableParameterName == "tabletextalign") tableParameterAll["table"] += "text-align:" + tableParameterData + " !important;";
+          else if (tableParameterName == "tablecolor") tableParameterAll["table"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "tablebordercolor")
+            tableParameterAll["table"] += "border:2px solid " + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "rowbgcolor") tableParameterAll["tr"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "rowtextalign") tableParameterAll["tr"] += "text-align:" + tableParameterData + " !important;";
+          else if (tableParameterName == "rowcolor") tableParameterAll["tr"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "colcolor") tableParameterAll["col"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "colbgcolor")
+            tableParameterAll["col"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "coltextalign") tableParameterAll["col"] += "text-align:" + tableParameterData + " !important;";
+          else if (tableParameterName == "bgcolor") tableParameterAll["td"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "color") tableParameterAll["td"] += "color:" + this.getToolDarkModeSplit(tableParameterData) + ";";
+          else if (tableParameterName == "width") tableParameterAll["td"] += "width:" + this.getToolPxAddCheck(tableParameterData) + ";";
+          else if (tableParameterName == "height") tableParameterAll["td"] += "height:" + this.getToolPxAddCheck(tableParameterData) + ";";
+          else doAnyThing += "&lt;" + tableParameter + "&gt;";
         } else if (tableParameterSplit.length === 1) {
-          if (tableParameter == 'nopad')
-              tableParameterAll['td'] += 'padding: 0 !important;'
+          if (tableParameter == "nopad") tableParameterAll["td"] += "padding: 0 !important;";
           else if (tableParameter.match(/^-[0-9]+$/)) {
-            tableColspanAuto = 0
-            tableParameterAll['colspan'] = tableParameter.replace(/[^0-9]+/g, "");
-          }
-          else if (tableParameter.match(/^(\^|v)?\|[0-9]+$/)) {
-            if (tableParameter[0] == '^')
-                tableParameterAll['td'] += 'vertical-align: top;'
-            else if (tableParameter[0] == 'v')
-                tableParameterAll['td'] += 'vertical-align: bottom;'
+            tableColspanAuto = 0;
+            tableParameterAll["colspan"] = tableParameter.replace(/[^0-9]+/g, "");
+          } else if (tableParameter.match(/^(\^|v)?\|[0-9]+$/)) {
+            if (tableParameter[0] == "^") tableParameterAll["td"] += "vertical-align: top;";
+            else if (tableParameter[0] == "v") tableParameterAll["td"] += "vertical-align: bottom;";
 
-            tableParameterAll['rowspan'] = tableParameter.replace(/[^0-9]+/g, "");
-          }
-          else if (['(', ':', ')'].includes(tableParameter) ) {
-            tableAlignAuto = 0
-            if (tableParameter == '(')
-                tableParameterAll['td'] += 'text-align: left !important;'
-            else if (tableParameter == ':')
-                tableParameterAll['td'] += 'text-align: center !important;'
-            else if (tableParameter == ')')
-                tableParameterAll['td'] += 'text-align: right !important;'
-          }
-          else if (tableParameter.match(/^(?:(?:#((?:[0-9a-f-A-F]{3}){1,2}))|(\w+))$/)) {
+            tableParameterAll["rowspan"] = tableParameter.replace(/[^0-9]+/g, "");
+          } else if (["(", ":", ")"].includes(tableParameter)) {
+            tableAlignAuto = 0;
+            if (tableParameter == "(") tableParameterAll["td"] += "text-align: left !important;";
+            else if (tableParameter == ":") tableParameterAll["td"] += "text-align: center !important;";
+            else if (tableParameter == ")") tableParameterAll["td"] += "text-align: right !important;";
+          } else if (tableParameter.match(/^(?:(?:#((?:[0-9a-f-A-F]{3}){1,2}))|(\w+))$/)) {
             tableParameterData = this.getToolCssSafe(tableParameter);
-            tableParameterAll['td'] += 'background:' + this.getToolDarkModeSplit(tableParameterData) + ';'
+            tableParameterAll["td"] += "background:" + this.getToolDarkModeSplit(tableParameterData) + ";";
           } else {
-            doAnyThing += '&lt;' + tableParameter + '&gt;'
+            doAnyThing += "&lt;" + tableParameter + "&gt;";
           }
         } else {
-          doAnyThing += '&lt;' + tableParameter + '&gt;'
+          doAnyThing += "&lt;" + tableParameter + "&gt;";
         }
       }
 
@@ -1009,17 +947,20 @@ try {
       }
 
       tableParameterAll["data"] = doAnyThing + data;
-      return tableParameterAll
+      return tableParameterAll;
     };
 
-    const tableRegex = /\n((?:(?:(?:(?:\|\|)+)|(?:\|[^|]+\|(?:\|\|)*))\n?(?:(?:(?!\|\|).)+))(?:(?:\|\||\|\|\n|(?:\|\|)+(?!\n)(?:(?:(?!\|\|).)+)\n*)*)\|\|)\n/s;
+    const tableRegex =
+      /\n((?:(?:(?:(?:\|\|)+)|(?:\|[^|]+\|(?:\|\|)*))\n?(?:(?:(?!\|\|).)+))(?:(?:\|\||\|\|\n|(?:\|\|)+(?!\n)(?:(?:(?!\|\|).)+)\n*)*)\|\|)\n/s;
     const tableSubRegex = /(\n?)((?:\|\|)+)((?:&lt;(?:(?:(?!&lt;|&gt;).)+)&gt;)*)((?:\n*(?:(?:(?:(?!\|\|).)+)\n*)+)|(?:(?:(?!\|\|).)*))/;
     const tableCaptionRegex = /^\|([^|]+)\|/;
     let tableCountAll = (this.renderData.match(globalRegExp(tableRegex)) || []).length * 2;
     while (true) {
-      const tableDataMatch = this.renderData.match(tableRegex)
-      if (tableCountAll < 0) {console.error("error: render table count overflow"); break;}
-      else if (!tableDataMatch) break;
+      const tableDataMatch = this.renderData.match(tableRegex);
+      if (tableCountAll < 0) {
+        console.error("error: render table count overflow");
+        break;
+      } else if (!tableDataMatch) break;
 
       let tableData = tableDataMatch[1];
       const tableCaptionMatch = tableData.match(tableCaptionRegex);
@@ -1031,11 +972,19 @@ try {
         tableCaption = "";
       }
 
-      const tableParameter: { div: string; class: string; table: string; tr: string; td: string; col: Record<number, string>; rowspan: Record<number, number> } = { div: "", class: "", table: "", tr: "", td: "", col: {}, rowspan: {} }
+      const tableParameter: {
+        div: string;
+        class: string;
+        table: string;
+        tr: string;
+        td: string;
+        col: Record<number, string>;
+        rowspan: Record<number, number>;
+      } = { div: "", class: "", table: "", tr: "", td: "", col: {}, rowspan: {} };
       let tableDataEnd = "";
       let tableColNum = 0;
       let tableTrChange = 0;
-      
+
       let match;
       let tableSubResults = [];
       const tableSubRegexGlobal = globalRegExp(tableSubRegex);
@@ -1043,16 +992,16 @@ try {
         tableSubResults.push(match);
       }
       // 0번 그룹 제거
-      tableSubResults.forEach(array => array.splice(0, 1));
+      tableSubResults.forEach((array) => array.splice(0, 1));
       for (const tableSub of tableSubResults) {
         let tableDataIn = tableSub[3];
         tableDataIn = tableDataIn.replace(/^\n+/g, "");
 
         if (tableSub[0] !== "" && tableTrChange === 1) {
           tableColNum = 0;
-          tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + '</tr>';
-          tableParameter["tr"] = ""
-          tableParameter["td"] = ""
+          tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + "</tr>";
+          tableParameter["tr"] = "";
+          tableParameter["td"] = "";
         }
 
         let tableSubParameter = manageTableParameter(tableSub[1], tableSub[2], tableDataIn);
@@ -1087,38 +1036,49 @@ try {
           tableTrChange = 1;
         } else {
           tableTrChange = 0;
-          tableParameter["td"] += '<td colspan="' + tableSubParameter['colspan'] + '" rowspan="' + tableSubParameter['rowspan'] + '" style="' + tableParameter['col'][tableColNum] + tableSubParameter['td'] + '"><back_br>\n' + tableSubParameter['data'] + '\n<front_br></td>'
+          tableParameter["td"] +=
+            '<td colspan="' +
+            tableSubParameter["colspan"] +
+            '" rowspan="' +
+            tableSubParameter["rowspan"] +
+            '" style="' +
+            tableParameter["col"][tableColNum] +
+            tableSubParameter["td"] +
+            '"><back_br>\n' +
+            tableSubParameter["data"] +
+            "\n<front_br></td>";
         }
 
         tableColNum += 1;
-        console.log(tableSubParameter['col'][tableColNum], tableSubParameter['td'])
+        console.log(tableSubParameter["col"][tableColNum], tableSubParameter["td"]);
       }
 
-      tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + '</tr>'
-      tableDataEnd = '<table class="' + tableParameter['class'] + '" style="' + tableParameter['table'] + '">' + tableCaption + tableDataEnd + '</table>'
-      tableDataEnd = '<div class="table_safe" style="' + tableParameter['div'] + '">' + tableDataEnd + '</div>';
-      this.renderData = this.renderData.replace(tableRegex, ('\n<front_br>' + tableDataEnd + '\n'));
-      
+      tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + "</tr>";
+      tableDataEnd =
+        '<table class="' + tableParameter["class"] + '" style="' + tableParameter["table"] + '">' + tableCaption + tableDataEnd + "</table>";
+      tableDataEnd = '<div class="table_safe" style="' + tableParameter["div"] + '">' + tableDataEnd + "</div>";
+      this.renderData = this.renderData.replace(tableRegex, "\n<front_br>" + tableDataEnd + "\n");
+
       tableCountAll -= 1;
     }
   }
-  
+
   manageList() {
     const quoteRegex = /((?:\n&gt; *[^\n]*)+)\n/;
     let quoteCount = 0;
-    let quoteCountMax = (this.renderData.match(quoteRegex) || []).length * 10;
+    let quoteCountMax = (this.renderData.match(globalRegExp(quoteRegex)) || []).length * 10;
     while (true) {
-      let quoteData = this.renderData.match(quoteRegex);
+      let quoteDataMatch = this.renderData.match(quoteRegex);
       if (quoteCountMax < 0) break;
-      else if (!quoteData) break;
+      else if (!quoteDataMatch) break;
       else {
-        const quoteDataOriginal = quoteData[0];
-        let quoteDataNew = quoteData[1];
-        quoteDataNew = quoteDataNew.replace(/\n&gt; *(?<in>[^\n]*)/g, "$<in>\n").replace(/\n$/g, "");
-        quoteDataNew = this.getToolDataRevert(quoteDataNew);
+        const quoteDataOrg = quoteDataMatch[0];
+        let quoteData = quoteDataMatch[1];
+        quoteData = quoteData.replace(/\n&gt; *(?<in>[^\n]*)/g, "$<in>\n").replace(/\n$/g, "");
+        quoteData = this.getToolDataRevert(quoteData);
 
-        let quoteDataEnd = this.doInterRender(quoteDataNew, this.docSet["docInclude"] + "opennamu_quote_" + quoteCount);
-        const dataName = this.getToolDataStorage('<div>', "</div>", quoteDataOriginal);
+        let quoteDataEnd = this.doInterRender(quoteData, this.docSet["docInclude"] + "opennamu_quote_" + quoteCount);
+        const dataName = this.getToolDataStorage("<div>", "</div>", quoteDataOrg);
 
         this.renderData = this.renderData.replace(
           quoteRegex,
@@ -1130,152 +1090,51 @@ try {
       quoteCount += 1;
     }
 
-    // const handler = (match: string, p1: string, p2: string) => {
-    //   const listData = p2;
-    //   let listLen = p1.length;
-    //   if (listLen === 0) listLen = 1;
-
-    //   const listStyle: Record<number, string> = {
-    //     1: "list-style: unset;",
-    //     2: "list-style: circle;",
-    //     3: "list-style: square;",
-    //   };
-    //   let listStyleData = "list-style: square;";
-    //   if (listStyle[listLen]) listStyleData = listStyle[listLen];
-
-    //   return '<li style="margin-left: ' + listLen * 20 + "px;" + listStyleData + '">' + listData + "</li>";
-    // };
-    // 리스트 공통 파트
     function intToAlpha(num: number) {
-      
-      const alphaList = Array.from(Array(26), (_, i) => String.fromCharCode(97 + i)).join('');
+      const alphaList = Array.from(Array(26), (_, i) => String.fromCharCode(97 + i)).join("");
       const alphaLen = alphaList.length;
-      let end_text = ''
+      let end_text = "";
 
       while (num) {
-        end_text = alphaList[num % alphaLen - 1] + end_text
+        end_text = alphaList[(num % alphaLen) - 1] + end_text;
         num = Math.floor(num / alphaLen);
       }
 
-      return end_text
+      return end_text;
     }
 
     // https://www.geeksforgeeks.org/python-program-to-convert-integer-to-roman/
     function intToRoman(number: number) {
-      const num = [1, 4, 5, 9, 10, 40, 50, 90, 100, 400, 500, 900, 1000]
-      const sym = ["I", "IV", "V", "IX", "X", "XL", "L", "XC", "C", "CD", "D", "CM", "M"]
-      let i = 12
-      let end_text = ''
+      const num = [1, 4, 5, 9, 10, 40, 50, 90, 100, 400, 500, 900, 1000];
+      const sym = ["I", "IV", "V", "IX", "X", "XL", "L", "XC", "C", "CD", "D", "CM", "M"];
+      let i = 12;
+      let end_text = "";
 
       while (number) {
-        let div = Math.floor(number / num[i])
-        number %= num[i]
+        let div = Math.floor(number / num[i]);
+        number %= num[i];
 
         while (div) {
-          end_text += sym[i]
-          div -= 1
+          end_text += sym[i];
+          div -= 1;
         }
 
-        i -= 1
+        i -= 1;
       }
 
-      return end_text
+      return end_text;
     }
 
     const useListViewChange = this.config.useListViewChange;
     const listStyle: Record<number, string> = {
-      1 : 'opennamu_list_1',
-      2 : 'opennamu_list_2',
-      3 : 'opennamu_list_3',
-      4 : 'opennamu_list_4'
-    }
-    class IntTo {
-      listNum: Record<string, any> = {};
-      listViewSet!: string;
-
-      constructor(listViewSet = "") {
-        this.listViewSet = listViewSet;
-      }
-
-      match(match: string, ...groups: string[]) {
-        if (groups[3]) {
-          let listData = groups[4];
-          let listLen = groups[0].length;
-          if (listLen === 0) {
-            listLen = 1;
-          }
-
-          let listStyleData = "opennamu_list_5"
-          if (listStyle[listLen]) {
-            listStyleData = listStyle[listLen];
-          }
-          return '<li style="margin-left: ' + listLen * 20 + 'px;" class="' + listStyleData + '">' + listData + '</li>'
-        } else {
-          let listType = groups[1];
-
-          let doType = "int"
-          if (listType == 'a')
-              doType = 'alpha_small'
-          else if (listType == 'A')
-              doType = 'alpha_big'
-          else if (listType == 'i')
-              doType = 'roman_small'
-          else if (listType == 'I')
-              doType = 'roman_big'
-
-          if (!this.listNum[doType])
-            this.listNum[doType] = []
-        
-          for (const type of Object.keys(this.listNum)) {
-            if (type !== doType)
-              this.listNum[type] = []
-          }
-
-          let listData = groups[4]
-          let listStart = groups[2]
-          let listLen = groups[0].length
-          if (listLen === 0) {
-            listLen = 1;
-          }
-
-          if (this.listNum[doType].length >= listLen) {
-            this.listNum[doType][listLen - 1] += 1
-            for (let i = listLen; i < this.listNum[doType].length; i++) {
-              this.listNum[doType][i] = 0
-            }
-          } else {
-            this.listNum[doType].push("1".repeat(listLen - this.listNum[doType].length).split("").map(v => Number(v)))
-          }
-
-          if (listStart) {
-            this.listNum[doType][listLen - 1] = Number(listStart)
-          }
-
-          let changeText!: string;
-          if (doType == 'int') {
-            if (this.listViewSet === 'on') {
-              changeText = this.listNum[doType].filter((value: number) => value !== 0).map((value: number) => String(value)).join("-")
-            }
-            else {
-              changeText = String(this.listNum[doType][listLen - 1])
-            }
-          }
-          else if (doType == 'roman_big')
-              changeText = intToRoman(this.listNum[doType][listLen - 1]).toUpperCase()
-          else if (doType == 'roman_small')
-              changeText = intToRoman(this.listNum[doType][listLen - 1]).toLowerCase()
-          else if (doType == 'alpha_big')
-              changeText = intToAlpha(this.listNum[doType][listLen - 1]).toUpperCase()
-          else
-              changeText = intToAlpha(this.listNum[doType][listLen - 1]).toLowerCase()
-
-          return '<li style="margin-left: ' + (listLen - 1) * 20 + 'px;" class="opennamu_list_none">' + changeText + '. ' + listData + '</li>'
-        }
-      }
-    }
+      1: "opennamu_list_1",
+      2: "opennamu_list_2",
+      3: "opennamu_list_3",
+      4: "opennamu_list_4",
+    };
 
     const intToMatch = () => {
-      const listNum: Record<string, any> = {};
+      const listNum: Record<string, number[]> = {};
       return (match: string, ...groups: string[]) => {
         if (groups[3]) {
           let listData = groups[4];
@@ -1284,88 +1143,83 @@ try {
             listLen = 1;
           }
 
-          let listStyleData = "opennamu_list_5"
+          let listStyleData = "opennamu_list_5";
           if (listStyle[listLen]) {
             listStyleData = listStyle[listLen];
           }
-          return '<li style="margin-left: ' + listLen * 20 + 'px;" class="' + listStyleData + '">' + listData + '</li>'
+          return '<li style="margin-left: ' + listLen * 20 + 'px;" class="' + listStyleData + '">' + listData + "</li>";
         } else {
           let listType = groups[1];
 
-          let doType = "int"
-          if (listType == 'a')
-              doType = 'alpha_small'
-          else if (listType == 'A')
-              doType = 'alpha_big'
-          else if (listType == 'i')
-              doType = 'roman_small'
-          else if (listType == 'I')
-              doType = 'roman_big'
+          let doType = "int";
+          if (listType == "a") doType = "alpha_small";
+          else if (listType == "A") doType = "alpha_big";
+          else if (listType == "i") doType = "roman_small";
+          else if (listType == "I") doType = "roman_big";
 
-          if (!listNum[doType])
-            listNum[doType] = []
-        
+          if (!listNum[doType]) listNum[doType] = [];
+
           for (const type of Object.keys(listNum)) {
-            if (type !== doType)
-              listNum[type] = []
+            if (type !== doType) listNum[type] = [];
           }
 
-          let listData = groups[4]
-          let listStart = groups[2]
-          let listLen = groups[0].length
+          let listData = groups[4];
+          let listStart = groups[2];
+          let listLen = groups[0].length;
           if (listLen === 0) {
             listLen = 1;
           }
 
           if (listNum[doType].length >= listLen) {
-            listNum[doType][listLen - 1] += 1
+            listNum[doType][listLen - 1] += 1;
             for (let i = listLen; i < listNum[doType].length; i++) {
-              listNum[doType][i] = 0
+              listNum[doType][i] = 0;
             }
           } else {
-            listNum[doType].push("1".repeat(listLen - listNum[doType].length).split("").map(v => Number(v)))
+            listNum[doType] = listNum[doType].concat(
+              "1"
+                .repeat(listLen - listNum[doType].length)
+                .split("")
+                .map((v) => Number(v))
+            );
           }
 
           if (listStart) {
-            listNum[doType][listLen - 1] = Number(listStart)
+            listNum[doType][listLen - 1] = Number(listStart);
           }
 
           let changeText!: string;
-          if (doType == 'int') {
-            if (useListViewChange === 'on') {
-              changeText = listNum[doType].filter((value: number) => value !== 0).map((value: number) => String(value)).join("-")
+          if (doType == "int") {
+            if (useListViewChange === "on") {
+              changeText = listNum[doType]
+                .filter((value: number) => value !== 0)
+                .map((value: number) => String(value))
+                .join("-");
+            } else {
+              changeText = String(listNum[doType][listLen - 1]);
             }
-            else {
-              changeText = String(listNum[doType][listLen - 1])
-            }
-          }
-          else if (doType == 'roman_big')
-              changeText = intToRoman(listNum[doType][listLen - 1]).toUpperCase()
-          else if (doType == 'roman_small')
-              changeText = intToRoman(listNum[doType][listLen - 1]).toLowerCase()
-          else if (doType == 'alpha_big')
-              changeText = intToAlpha(listNum[doType][listLen - 1]).toUpperCase()
-          else
-              changeText = intToAlpha(listNum[doType][listLen - 1]).toLowerCase()
+          } else if (doType == "roman_big") changeText = intToRoman(listNum[doType][listLen - 1]).toUpperCase();
+          else if (doType == "roman_small") changeText = intToRoman(listNum[doType][listLen - 1]).toLowerCase();
+          else if (doType == "alpha_big") changeText = intToAlpha(listNum[doType][listLen - 1]).toUpperCase();
+          else changeText = intToAlpha(listNum[doType][listLen - 1]).toLowerCase();
 
-          return '<li style="margin-left: ' + (listLen - 1) * 20 + 'px;" class="opennamu_list_none">' + changeText + '. ' + listData + '</li>'
+          return '<li style="margin-left: ' + (listLen - 1) * 20 + 'px;" class="opennamu_list_none">' + changeText + ". " + listData + "</li>";
         }
-      }
-    }
+      };
+    };
 
     const listRegex = /((?:\n( *)(?:(\*)) ?([^\n]*))+|(?:\n( *)(?:(1|a|A|I|i)\.(?:#([0-9]*))?) ?([^\n]*)){2,})\n/;
-    let listCountMax = (this.renderData.match(listRegex) || []).length * 3;
+    let listCountMax = (this.renderData.match(globalRegExp(listRegex)) || []).length * 3;
     while (true) {
-      const listData = this.renderData.match(listRegex);
-      let listDataNew!: string;
+      const listDataMatch = this.renderData.match(listRegex);
       if (listCountMax < 0) break;
-      else if (!listData) break;
+      else if (!listDataMatch) break;
       else {
-        listDataNew = listData[1];
+        const listData = listDataMatch[1];
         const listSubRegex = /\n( *)(?:(1|a|A|I|i)\.(?:#([0-9]*))?|(\*)) ?([^\n]*)/g;
-        const listDataStr = listDataNew.replace(listSubRegex, intToMatch())
+        const listDataStr = listData.replace(listSubRegex, intToMatch());
 
-        this.renderData = this.renderData.replace(listRegex, '\n<front_br><ul>' + listDataStr + "</ul><back_br>\n");
+        this.renderData = this.renderData.replace(listRegex, "\n<front_br><ul>" + listDataStr + "</ul><back_br>\n");
       }
 
       listCountMax -= 1;
@@ -1375,33 +1229,49 @@ try {
   // re.sub fix
   manageMacro() {
     // double macro function
-    const manageMacroDouble = (match: string, p1: string, p2: string) => {
-      const matchOriginal = match;
-      const nameData = p1.toLowerCase();
+    const manageMacroDouble = (full: string, ...match: string[]) => {
+      const matchOriginal = full;
+      
+      const nameData = match[0].toLowerCase();
 
       const macroSplitRegex = /(?:^|,) *([^,]+)/;
       const macroSplitSubRegex = /(^[^=]+) *= *([^=]+)/;
 
-      if (["youtube", "nicovideo", "navertv", "kakaotv", "vimeo"].includes(nameData)) {
-        const data = p2.match(macroSplitRegex) || [];
+      if (['youtube', 'nicovideo', 'navertv', 'kakaotv', 'vimeo', 'instagram', 'twitter', 'tiktok', 'facebook'].includes(nameData)) {
+        const data = match[1].match(globalRegExp(macroSplitRegex)) || [];
         console.log(data);
+
         // get option
         let videoCode = "";
         let videoStart = "";
         let videoEnd = "";
+
         let videoWidth = "640px";
         let videoHeight = "360px";
-        for (const datum of data) {
-          const dataSub = datum.match(macroSplitSubRegex);
-          let dataSubNew!: string[];
-          if (dataSub) {
-            dataSubNew = [dataSub[1].toLowerCase(), dataSub[2]];
+        if (nameData == 'instagram' || nameData == 'tiktok') {
+          videoWidth = '360px'
+          videoHeight = '480px'
+        }
+        else if (nameData == 'facebook') {
+          videoWidth = '500px'
+          videoHeight = '616px'
+        }
+        else if (nameData == 'twitter') {
+          videoWidth = '480px'
+          videoHeight = '480px'
+        }
 
-            if (dataSub[1] === "width") videoWidth = this.getToolPxAddCheck(dataSub[2]);
-            else if (dataSub[1] === "height") videoHeight = this.getToolPxAddCheck(dataSub[2]);
-            else if (dataSub[1] === "start") videoStart = dataSub[2];
-            else if (dataSub[1] === "end") videoEnd = dataSub[2];
-            else if (dataSub[1] === "https://www.youtube.com/watch?v" && nameData == "youtube") videoCode = dataSub[2];
+        for (const datum of data) {
+          const dataSubMatch = datum.match(macroSplitSubRegex);
+          if (dataSubMatch) {
+            let dataSub = dataSubMatch.slice(1)
+            dataSub = [dataSub[0].toLowerCase(), dataSub[1]];
+
+            if (dataSub[0] === "width") videoWidth = this.getToolPxAddCheck(dataSub[1]);
+            else if (dataSub[0] === "height") videoHeight = this.getToolPxAddCheck(dataSub[1]);
+            else if (dataSub[0] === "start") videoStart = dataSub[1];
+            else if (dataSub[0] === "end") videoEnd = dataSub[1];
+            else if (dataSub[0] === "https://www.youtube.com/watch?v" && nameData == "youtube") videoCode = dataSub[1];
           } else {
             videoCode = datum;
           }
@@ -1423,7 +1293,19 @@ try {
               videoCode += "?end=" + videoEnd;
             }
           }
-        } else if (nameData === "kakaotv") {
+        } 
+    else if (nameData === 'instagram') {
+        videoCode = videoCode.replace(/^https:\/\/www\.instagram\.com\/p\//g, '')
+        videoCode = 'https://www.instagram.com/p/' + videoCode +'/embed/'
+    } else if (nameData === 'facebook') {
+        videoCode = 'https://www.facebook.com/plugins/post.php?href=' + videoCode + '&width=' + videoWidth + '&height=' + videoHeight
+    } else if (nameData === 'tiktok') {
+        videoCode = 'https://www.tiktok.com/embed/v2/' + videoCode
+    } else if (nameData === 'twitter') {
+        videoCode = 'https://twitframe.com/show?url=' + videoCode
+        if (this.darkmode === '1')
+            videoCode += '&theme=dark'
+    } else if (nameData === "kakaotv") {
           videoCode = videoCode.replace(/^https:\/\/tv\.kakao\.com\/v\//g, "");
           videoCode = `https://tv.kakao.com/embed/player/cliplink/${videoCode}?service=kakao_tv`;
         } else if (nameData === "navertv") {
@@ -1447,19 +1329,21 @@ try {
       } else if (nameData === "toc") {
         return "<toc_no_auto>";
       } else if (nameData === "ruby") {
-        const data = p2.match(macroSplitRegex) || [];
+        const data = match[1].match(globalRegExp(macroSplitRegex)) || [];
+
+        // get option
         let mainText = "";
         let subText = "";
         let color = "";
         for (const datum of data) {
-          const dataSub = datum.match(macroSplitSubRegex);
-          let dataSubNew!: string[];
+          const dataSubMatch = datum.match(macroSplitSubRegex);
 
-          if (dataSub) {
-            dataSubNew = [dataSub[1].toLowerCase(), dataSub[2]];
+          if (dataSubMatch) {
+            let dataSub = dataSubMatch.slice(1);
+            dataSub = [dataSub[0].toLowerCase(), dataSub[1]];
 
-            if (dataSub[1] === "ruby") subText = dataSub[2];
-            else if (dataSub[1] === "color") color = dataSub[2];
+            if (dataSub[0] === "ruby") subText = dataSub[1];
+            else if (dataSub[0] === "color") color = dataSub[1];
           } else {
             mainText = datum;
           }
@@ -1478,7 +1362,7 @@ try {
 
         return "<" + dataName + "></" + dataName + ">";
       } else if (nameData === "anchor") {
-        const mainText = this.getToolDataRevert(p2, "render");
+        const mainText = this.getToolDataRevert(match[1], "render");
         const dataName = this.getToolDataStorage('<span id="' + mainText + '">', "</span>", matchOriginal);
         return "<" + dataName + "></" + dataName + ">";
       } else if (nameData === "age") {
@@ -1486,8 +1370,8 @@ try {
         let dataText = "";
         const datePattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 
-        if (datePattern.test(p2)) {
-          const date = new Date(p2);
+        if (datePattern.test(match[1])) {
+          const date = new Date(match[1]);
           const dateNow = new Date();
 
           // 유효성 검사
@@ -1516,8 +1400,8 @@ try {
         // 정규 표현식으로 날짜 형식 검사
         const datePattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
 
-        if (datePattern.test(p2)) {
-          const date = new Date(p2);
+        if (datePattern.test(match[1])) {
+          const date = new Date(match[1]);
           const dateNow = new Date();
 
           // 유효성 검사
@@ -1546,17 +1430,17 @@ try {
       } else if (nameData === "pagecount") {
         return "0";
       } else {
-        return "<macro>" + p1 + "(" + p2 + ")" + "</macro>";
+        return "<macro>" + match[0] + "(" + match[1] + ")" + "</macro>";
       }
     };
 
     this.renderData = this.renderData.replace(/\[([^[(\]]+)\(((?:(?!\)\]).)+)\)\]/g, manageMacroDouble);
 
-    const manageMacroSingle = (match: string, p1: string) => {
-      const matchOriginal = match;
-      p1 = p1.toLowerCase();
+    const manageMacroSingle = (full: string, p1: string) => {
+      const matchOriginal = full;
+      let match = p1.toLowerCase();
 
-      if (["date", "datetime"].includes(p1)) {
+      if (["date", "datetime"].includes(match)) {
         const getTime = () => {
           const date = new Date();
           const year = date.getFullYear();
@@ -1570,15 +1454,15 @@ try {
         };
         const dataName = this.getToolDataStorage(getTime(), "", matchOriginal);
         return "<" + dataName + "></" + dataName + ">";
-      } else if (p1 === "br") {
+      } else if (match === "br") {
         const dataName = this.getToolDataStorage("<br>", "", matchOriginal);
         return "<" + dataName + "></" + dataName + ">";
-      } else if (p1 === "clearfix") {
+      } else if (match === "clearfix") {
         const dataName = this.getToolDataStorage('<div style="clear: both;"></div>', "", matchOriginal);
         return "<" + dataName + "></" + dataName + ">";
-      } else if (["목차", "toc", "tableofcontents"].includes(p1)) {
+      } else if (["목차", "toc", "tableofcontents"].includes(match)) {
         return "<toc_need_part>";
-      } else if (p1 === "pagecount") {
+      } else if (match === "pagecount") {
         return String((this.database.data || []).length);
       } else {
         return `<macro>${p1}</macro>`;
@@ -1602,391 +1486,411 @@ try {
 
     let linkCountAll = (this.renderData.match(globalRegExp(linkRegex)) || []).length * 4;
     while (true) {
-      const linkData = this.renderData.match(linkRegex);
-      if (!linkData) break;
+      const linkDataMatch = this.renderData.match(linkRegex);
+      if (!linkDataMatch) break;
       else if (linkCountAll < 0) {
         console.log("Error: render link count overflow");
         break;
-      } else {
-        // link split
-        const linkDataFull = linkData[0];
-        let linkMain = linkData[1];
-        let linkMainOriginal = linkMain;
+      }
 
-        // file link
-        if (linkMain.match(/^(파일|file|외부|out):/i)) {
-          let fileWidth = "";
-          let fileHeight = "";
-          let fileAlign = "";
-          let fileBgcolor = "";
-          let fileTurn = "";
-          let fileRadius = "";
-          let fileRendering = "";
+      // link split
+      const linkDataFull = linkDataMatch[0];
+      let linkData = linkDataMatch.slice(1);
 
-          const fileSplitRegex = /(?:^|&amp;) *((?:(?!&amp;).)+)/g;
-          const fileSplitSubRegex = /(^[^=]+) *= *([^=]+)/;
+      let linkMain = linkData[0];
+      let linkMainOrg = linkMain;
 
-          if (linkData[1]) {
-            const data = linkData[1].match(fileSplitRegex) || [];
+      // file link
+      if (linkMain.match(/^(파일|file|외부|out):/i)) {
+        let fileWidth = "";
+        let fileHeight = "";
+        let fileAlign = "";
+        let fileBgcolor = "";
+        let fileTurn = "";
+        let fileRadius = "";
+        let fileRendering = "";
 
-            for (const datum of data) {
-              const dataSub = datum.match(fileSplitSubRegex);
-              if (dataSub) {
-                const key = dataSub[1].trim();
-                const value = dataSub[2].trim();
+        const fileSplitRegex = /(?:^|&amp;) *((?:(?!&amp;).)+)/g;
+        const fileSplitSubRegex = /(^[^=]+) *= *([^=]+)/;
 
-                switch (key) {
-                  case "width":
-                    fileWidth = this.getToolPxAddCheck(value);
-                    break;
-                  case "height":
-                    fileHeight = this.getToolPxAddCheck(value);
-                    break;
-                  case "align":
-                    if (["center", "left", "right"].includes(value)) {
-                      fileAlign = value;
-                    }
-                    break;
-                  case "bgcolor":
-                    fileBgcolor = value;
-                    break;
-                  case "theme":
-                    if (value === "dark") {
-                      fileTurn = "dark";
-                    } else if (value === "light") {
-                      fileTurn = "light";
-                    }
-                    break;
-                  case "border-radius":
-                    fileRadius = this.getToolPxAddCheck(value);
-                  case "rendering":
-                    if (value === "pixelated") {
-                      fileRendering = "pixelated";
-                    }
-                }
+        if (linkData[1]) {
+          const data = linkData[1].match(fileSplitRegex) || [];
+
+          for (const datum of data) {
+            const dataSub = datum.match(fileSplitSubRegex);
+            if (dataSub) {
+              const key = dataSub[1].trim();
+              const value = dataSub[2].trim();
+
+              switch (key) {
+                case "width":
+                  fileWidth = this.getToolPxAddCheck(value);
+                  break;
+                case "height":
+                  fileHeight = this.getToolPxAddCheck(value);
+                  break;
+                case "align":
+                  if (["center", "left", "right"].includes(value)) {
+                    fileAlign = value;
+                  }
+                  break;
+                case "bgcolor":
+                  fileBgcolor = value;
+                  break;
+                case "theme":
+                  if (value === "dark") {
+                    fileTurn = "dark";
+                  } else if (value === "light") {
+                    fileTurn = "light";
+                  }
+                  break;
+                case "border-radius":
+                  fileRadius = this.getToolPxAddCheck(value);
+                  break;
+                case "rendering":
+                  if (value === "pixelated") {
+                    fileRendering = "pixelated";
+                  }
+                  break;
+                default:
+                  break;
               }
             }
           }
+        }
 
-          linkMainOriginal = "";
-          let linkSub = linkMain;
-          let fileOut = 0;
-          let linkExist!: string;
-          let linkExtensionNew!: string;
+        linkMainOrg = "";
+        let linkSub = linkMain;
+        let fileOut = 0;
 
-          const linkOutRegex = /^(외부|out):/i;
-          const linkInRegex = /^(파일|file):/i;
+        let linkExist!: string;
+        let linkExtension!: string;
 
-          // 링크 아웃 체크
-          if (linkOutRegex.test(linkMain)) {
-            linkMain = linkMain.replace(new RegExp(linkOutRegex, "gi"), "");
+        const linkOutRegex = /^(외부|out):/i;
+        const linkInRegex = /^(파일|file):/i;
 
-            linkMain = this.getToolDataRestore(linkMain, "slash");
-            linkMain = unescapeHtml(linkMain); // HTML Unescape
-            linkMain = linkMain.replace(/"/g, "&quot;");
+        // 링크 아웃 체크
+        if (linkOutRegex.test(linkMain)) {
+          linkMain = linkMain.replace(new RegExp(linkOutRegex, "gi"), "");
 
+          linkMain = this.getToolDataRestore(linkMain, "slash");
+          linkMain = unescapeHtml(linkMain); // HTML Unescape
+          linkMain = linkMain.replace(/"/g, "&quot;");
+
+          linkExist = "";
+          fileOut = 1;
+        } else {
+          linkMain = linkMain.replace(new RegExp(linkInRegex, "gi"), "");
+
+          linkMain = this.getToolDataRestore(linkMain, "slash");
+          linkMain = unescapeHtml(linkMain);
+
+          if (!this.dataBacklink[`file:${linkMain}`]) {
+            this.dataBacklink[`file:${linkMain}`] = {};
+          }
+
+          const dbData = this.database.data.find((value) => value.title === `file:${linkMain}`)?.title;
+          if (dbData) {
             linkExist = "";
-            fileOut = 1;
           } else {
-            linkMain = linkMain.replace(new RegExp(linkInRegex, "gi"), "");
-
-            linkMain = this.getToolDataRestore(linkMain, "slash");
-            linkMain = unescapeHtml(linkMain);
-
-            if (!this.dataBacklink[`file:${linkMain}`]) {
-              this.dataBacklink[`file:${linkMain}`] = {};
-            }
-
-            // 데이터베이스 쿼리 예시 (여기서는 가상의 구현)
-            const dbData = this.database.data.find((value) => value.title === `file:${linkMain}`);
-            if (dbData) {
-              linkExist = "";
-            } else {
-              linkExist = "opennamu_not_exist_link";
-              this.dataBacklink[`file:${linkMain}`]["no"] = "";
-            }
-
-            // 미구현: v.3.5.0 rev
-            const rev = "1";
-            this.dataBacklink[`file:${linkMain}`]["file"] = "";
-
-            const linkExtensionRegex = /\.([^.]+)$/;
-            const linkExtension = linkMain.match(linkExtensionRegex);
-            if (linkExtension) {
-              linkExtensionNew = linkExtension[1];
-            } else {
-              linkExtensionNew = "jpg";
-            }
-
-            linkMain = linkMain.replace(new RegExp(linkExtensionRegex, "g"), "");
-            linkMainOriginal = linkMain;
-
-            linkMain = "/image/" + urlPas(sha224Replace(linkMain)) + "." + linkExtension + ".cache_v" + rev;
+            linkExist = "opennamu_not_exist_link";
+            this.dataBacklink[`file:${linkMain}`]["no"] = "";
           }
 
-          // 스타일 설정
-          if (fileWidth !== "") {
-            fileWidth = "width:" + this.getToolCssSafe(fileWidth) + ";";
-          }
+          // 미구현: v.3.5.0 rev
+          const rev = "1";
+          this.dataBacklink[`file:${linkMain}`]["file"] = "";
 
-          if (fileHeight !== "") {
-            fileHeight = "height:" + this.getToolCssSafe(fileHeight) + ";";
-          }
-
-          let fileAlignStyle = "";
-          if (["left", "right"].includes(fileAlign)) {
-            fileAlignStyle = "float:" + fileAlign + ";";
-          }
-
-          if (fileBgcolor !== "") {
-            fileBgcolor = "background:" + this.getToolCssSafe(fileBgcolor) + ";";
-          }
-
-          if (fileRadius !== "") fileRadius = "border-radius:" + this.getToolCssSafe(fileRadius) + ";";
-
-          if (fileRendering != "") fileRendering = "image-rendering:" + this.getToolCssSafe(fileRendering) + ";";
-
-          const fileStyle = fileWidth + fileHeight + fileAlignStyle + fileBgcolor + fileRadius + fileRendering;
-          let fileEnd!: string;
-          const useImageSet = this.config.useImageSet;
-          if (useImageSet == "new_click" || useImageSet == "click") {
-            fileEnd = '<img style="' + fileStyle + '" id="opennamu_image_' + imageCount + '" alt="' + linkSub + '" src="">';
+          const linkExtensionRegex = /\.([^.]+)$/;
+          const linkExtensionMatch = linkMain.match(linkExtensionRegex);
+          if (linkExtensionMatch) {
+            linkExtension = linkExtensionMatch[1];
           } else {
-            fileEnd = '<img style="' + fileStyle + '" alt="' + linkSub + '" src="' + linkMain + '">';
+            linkExtension = "jpg";
           }
 
-          if (fileAlign === "center") {
-            fileEnd = `<div style="text-align:center;">${fileEnd}</div>`;
-          }
+          linkMain = linkMain.replace(new RegExp(linkExtensionRegex, "g"), "");
+          linkMainOrg = linkMain;
 
-          // 링크 존재 여부에 따른 처리
-          if (linkExist !== "") {
-            const dataName = this.getToolDataStorage(
-              `<a class="${linkExist}" title="${linkSub}" href="/upload?name=${urlPas(linkMainOriginal)}">(${linkSub})</a>`,
-              "</a>",
-              linkDataFull
-            );
-            this.renderData = this.renderData.replace(linkRegex, `<${dataName}></${dataName}>`);
-          } else {
-            let filePass = 0;
-            if (fileTurn !== "") {
-              if (fileTurn === "dark" && this.darkmode === "1") {
-                filePass = 1;
-              } else if (fileTurn === "light" && this.darkmode === "0") {
-                filePass = 1;
-              }
-            } else {
+          linkMain = "/image/" + urlPas(sha224Replace(linkMain)) + "." + linkExtension + ".cache_v" + rev;
+        }
+
+        // 스타일 설정
+        if (fileWidth !== "") {
+          fileWidth = "width:" + this.getToolCssSafe(fileWidth) + ";";
+        }
+
+        if (fileHeight !== "") {
+          fileHeight = "height:" + this.getToolCssSafe(fileHeight) + ";";
+        }
+
+        let fileAlignStyle = "";
+        if (["left", "right"].includes(fileAlign)) {
+          fileAlignStyle = "float:" + fileAlign + ";";
+        }
+
+        if (fileBgcolor !== "") {
+          fileBgcolor = "background:" + this.getToolCssSafe(fileBgcolor) + ";";
+        }
+
+        if (fileRadius !== "") fileRadius = "border-radius:" + this.getToolCssSafe(fileRadius) + ";";
+
+        if (fileRendering != "") fileRendering = "image-rendering:" + this.getToolCssSafe(fileRendering) + ";";
+
+        const fileStyle = fileWidth + fileHeight + fileAlignStyle + fileBgcolor + fileRadius + fileRendering;
+        let fileEnd!: string;
+        const useImageSet = this.config.useImageSet;
+        if (useImageSet == "new_click" || useImageSet == "click") {
+          fileEnd = '<img style="' + fileStyle + '" id="opennamu_image_' + imageCount + '" alt="' + linkSub + '" src="">';
+        } else {
+          fileEnd = '<img style="' + fileStyle + '" alt="' + linkSub + '" src="' + linkMain + '">';
+        }
+
+        if (fileAlign === "center") {
+          fileEnd = `<div style="text-align:center;">${fileEnd}</div>`;
+        }
+
+        // 링크 존재 여부에 따른 처리
+        if (linkExist !== "") {
+          const dataName = this.getToolDataStorage(
+            `<a class="${linkExist}" title="${linkSub}" href="/upload?name=${urlPas(linkMainOrg)}">(${linkSub})</a>`,
+            "</a>",
+            linkDataFull
+          );
+          this.renderData = this.renderData.replace(linkRegex, `<${dataName}></${dataName}>`);
+        } else {
+          let filePass = 0;
+          if (fileTurn !== "") {
+            if (fileTurn === "dark" && this.darkmode === "1") {
+              filePass = 1;
+            } else if (fileTurn === "light" && this.darkmode === "0") {
               filePass = 1;
             }
-
-            let fileLink!: string;
-            let dataName!: string;
-            if (filePass === 1) {
-              if (fileOut === 0) {
-                fileLink = '/w/file:' + urlPas(linkMainOriginal) + '.' + urlPas(linkExtensionNew)
-              } else {
-                fileLink = linkMain
-              }
-
-              if (useImageSet === "new_click") {
-                dataName = this.getToolDataStorage('<a title="' + linkSub + '" id="opennamu_image_' + imageCount + '_link" href="javascript:void(0);">' + fileEnd, '</a>', linkDataFull)
-                this.renderDataJS += 'document.getElementById("opennamu_image_' + imageCount + '_link").addEventListener("click", function(e) { document.getElementById("opennamu_image_' + imageCount + '").src = "' + this.getToolJSSafe(linkMain) + '";setTimeout(function() {document.getElementById("opennamu_image_' + imageCount + '_link").href = "' + this.getToolJSSafe(fileLink) + '";}, 100);});\n'
-                imageCount += 1
-              } else {
-                dataName = this.getToolDataStorage('<a title="' + linkSub + '" href="' + fileLink + '">' + fileEnd, '</a>', linkDataFull)
-              }
-            } else {
-              dataName = this.getToolDataStorage("", "", linkDataFull);
-            }
-
-            this.renderData = this.renderData.replace(linkRegex, `<${dataName}></${dataName}>` + linkData[2]);
-          }
-        }
-        // category 처리
-        if (/^(분류|category):/i.test(linkMain)) {
-          linkMain = linkMain.replace(/^(분류|category):/gi, "");
-
-          let categoryBlur = "";
-          if (/#blur$/i.test(linkMain)) {
-            linkMain = linkMain.replace(/#blur$/gi, "");
-            categoryBlur = "opennamu_category_blur";
-          }
-
-          let linkSub = linkMain;
-          let linkView = "";
-          if (linkData.length > 1 && linkData[1])
-            linkView = linkData[1];
-
-          linkMain = this.getToolDataRestore(linkMain, "slash");
-          linkMain = unescapeHtml(linkMain);
-
-          if (!this.dataCategoryList.includes(linkMain)) {
-            this.dataCategoryList.push(linkMain);
-
-            if (!this.dataBacklink[('category:' + linkMain)])
-              this.dataBacklink['category:' + linkMain] = {}
-
-            const dbData = this.database.data.find((value) => value.title === "category:" + linkMain);
-            let linkExist!: string;
-            if (dbData) {
-              linkExist = "";
-            } else {
-              linkExist = "opennamu_not_exist_link";
-              this.dataBacklink['category:' + linkMain]['no'] = ''
-            }
-
-            this.dataBacklink['category:' + linkMain]['cat'] = ''
-                        
-            if (linkView != '')
-                this.dataBacklink['category:' + linkMain]['cat_view'] = linkView
-            
-            if (categoryBlur != '')
-                this.dataBacklink['category:' + linkMain]['cat_blur'] = ''
-
-            linkMain = urlPas(linkMain);
-
-            if (this.dataCategory === "") {
-              this.dataCategory =
-                '<div class="opennamu_category" id="cate">' +
-                '<a class="opennamu_category_button" href="javascript:opennamu_do_category_spread();"> (+)</a>' +
-                "카테고리" +
-                " : ";
-            } else {
-              this.dataCategory += " | ";
-            }
-
-            this.dataCategory += `<a class="${categoryBlur} ${linkExist}" title="${linkSub}" href="/w/category:${linkMain}">${linkSub}</a>`;
-          }
-
-          this.renderData = this.renderData.replace(linkRegex, "");
-        }
-        // inter link 처리 (미구현/오픈나무 전용 문법)
-        else if (/^(?:inter|인터):([^:]+):/i.test(linkMain)) {
-          const linkInterRegex = /^(?:inter|인터):([^:]+):/i;
-
-          const linkInterName = linkMain.match(linkInterRegex) || [];
-          let linkInterNameNew: string = linkInterName ? linkInterName[1] : "";
-
-          linkMain = linkMain.replace(new RegExp(linkInterRegex, "g"), "");
-          const linkTitle = `${linkInterNameNew}:${linkMain}`;
-
-          linkMain = linkMain.replace(/&#x27;/g, "<link_single>");
-          const linkDataSharpRegex = /#([^#]+)$/;
-          let linkDataSharp = linkMain.match(linkDataSharpRegex) || [];
-          let linkDataSharpNew!: string;
-          if (linkDataSharp.length === 0) {
-            linkDataSharpNew = linkDataSharp[1];
-            linkDataSharpNew = unescapeHtml(linkDataSharpNew);
-            linkDataSharpNew = "#" + urlPas(linkDataSharpNew);
-            linkMain = linkMain.replace(new RegExp(linkDataSharpRegex, "g"), "");
           } else {
-            linkDataSharpNew = "";
+            filePass = 1;
           }
 
-          linkMain = linkMain.replaceAll("<link_single>", "&#x27;");
-          linkMain = this.getToolDataRestore(linkMain, "slash");
-          linkMain = unescapeHtml(linkMain);
+          let fileLink!: string;
+          let dataName!: string;
+          if (filePass === 1) {
+            if (fileOut === 0) {
+              fileLink = "/w/file:" + urlPas(linkMainOrg) + "." + urlPas(linkExtension);
+            } else {
+              fileLink = linkMain;
+            }
+
+            if (useImageSet === "new_click") {
+              dataName = this.getToolDataStorage(
+                '<a title="' + linkSub + '" id="opennamu_image_' + imageCount + '_link" href="javascript:void(0);">' + fileEnd,
+                "</a>",
+                linkDataFull
+              );
+              this.renderDataJS +=
+                'document.getElementById("opennamu_image_' +
+                imageCount +
+                '_link").addEventListener("click", function(e) { document.getElementById("opennamu_image_' +
+                imageCount +
+                '").src = "' +
+                this.getToolJSSafe(linkMain) +
+                '";setTimeout(function() {document.getElementById("opennamu_image_' +
+                imageCount +
+                '_link").href = "' +
+                this.getToolJSSafe(fileLink) +
+                '";}, 100);});\n';
+              imageCount += 1;
+            } else {
+              dataName = this.getToolDataStorage('<a title="' + linkSub + '" href="' + fileLink + '">' + fileEnd, "</a>", linkDataFull);
+            }
+          } else {
+            dataName = this.getToolDataStorage("", "", linkDataFull);
+          }
+
+          this.renderData = this.renderData.replace(linkRegex, `<${dataName}></${dataName}>` + linkData[2]);
+        }
+      }
+      // category 처리
+      else if (/^(분류|category):/i.test(linkMain)) {
+        linkMain = linkMain.replace(/^(분류|category):/gi, "");
+
+        let categoryBlur = "";
+        if (/#blur$/i.test(linkMain)) {
+          linkMain = linkMain.replace(/#blur$/gi, "");
+          categoryBlur = "opennamu_category_blur";
+        }
+
+        let linkSub = linkMain;
+        let linkView = "";
+        if (linkData.length > 1 && linkData[1]) linkView = linkData[1];
+
+        linkMain = this.getToolDataRestore(linkMain, "slash");
+        linkMain = unescapeHtml(linkMain);
+
+        if (!this.dataCategoryList.includes(linkMain)) {
+          this.dataCategoryList.push(linkMain);
+
+          if (!this.dataBacklink["category:" + linkMain]) this.dataBacklink["category:" + linkMain] = {};
+
+          const dbData = this.database.data.find((value) => value.title === "category:" + linkMain)?.title;
+          let linkExist!: string;
+          if (dbData) {
+            linkExist = "";
+          } else {
+            linkExist = "opennamu_not_exist_link";
+            this.dataBacklink["category:" + linkMain]["no"] = "";
+          }
+
+          this.dataBacklink["category:" + linkMain]["cat"] = "";
+
+          if (linkView != "") this.dataBacklink["category:" + linkMain]["cat_view"] = linkView;
+
+          if (categoryBlur != "") this.dataBacklink["category:" + linkMain]["cat_blur"] = "";
+
           linkMain = urlPas(linkMain);
 
-          // 미구현: 인터위키
-          this.renderData = this.renderData.replace(linkRegex, linkData[2]);
-        }
-        // out link 처리
-        else if (/^https?:\/\//i.test(linkMain)) {
-          linkMain = this.getToolDataRestore(linkMain, "slash");
-          const linkTitle = linkMain;
-          linkMain = unescapeHtml(linkMain);
-          linkMain = linkMain.replace(/"/g, "&quot;");
-          linkMain = linkMain.replace(/</g, "&lt;");
-          linkMain = linkMain.replace(/>/g, "&gt;");
-
-          let linkSub = linkData[1] || "";
-          const linkSubStorage = linkSub ? "" : linkMainOriginal;
-
-          const linkClass = 'opennamu_link_out'
-          // 미구현: 인터위키
-
-          const addStr = linkData[2] || "";
-
-          const dataName = this.getToolDataStorage(
-            `<a class="${linkClass}" target="_blank" title="${linkTitle}" href="${linkMain}">${linkSubStorage}</a>`,
-            "",
-            linkDataFull
-          );
-          this.renderData = this.renderData.replace(linkRegex, `<${dataName}>${linkSub}</${dataName}>` + addStr);
-        }
-        // in link 처리
-        else {
-          // if (linkMain === "../") {
-          //   linkMain = this.docName.replace(/(\/[^/]+)$/g, "");
-          // } else if (/^\//.test(linkMain)) {
-          //   linkMain = linkMain.replace(/^\//g, `${this.docName}/`);
-          // } else if (/^:(분류|category):/i.test(linkMain)) {
-          //   linkMain = linkMain.replace(/^:(분류|category):/gi, "category:");
-          // } else if (/^:(파일|file):/i.test(linkMain)) {
-          //   linkMain = linkMain.replace(/^:(파일|file):/gi, "file:");
-          // } else if (/^사용자:/i.test(linkMain)) {
-          //   linkMain = linkMain.replace(/^사용자:/gi, "user:");
-          // }
-          linkMain = this.getToolLinkFix(linkMain);
-
-          linkMain = linkMain.replace(/&#x27;/g, "<link_single>");
-          const linkDataSharpRegex = /#([^#]+)$/;
-          let linkDataSharp = linkMain.match(linkDataSharpRegex) || [];
-          let linkDataSharpNew!: string;
-          if (linkDataSharp.length !== 0) {
-            linkDataSharpNew = linkDataSharp[1];
-            linkDataSharpNew = unescapeHtml(linkDataSharpNew);
-            linkDataSharpNew = "#" + urlPas(linkDataSharpNew);
-            linkMain = linkMain.replace(new RegExp(linkDataSharpRegex, "g"), "");
+          if (this.dataCategory === "") {
+            this.dataCategory =
+              '<div class="opennamu_category" id="cate">' +
+              '<a class="opennamu_category_button" href="javascript:opennamu_do_category_spread();"> (+)</a>' +
+              "카테고리" +
+              " : ";
           } else {
-            linkDataSharpNew = "";
+            this.dataCategory += " | ";
           }
 
-          linkMain = linkMain.replaceAll("<link_single>", "&#x27;");
-          linkMain = this.getToolDataRestore(linkMain, "slash");
-          linkMain = unescapeHtml(linkMain);
+          this.dataCategory += `<a class="${categoryBlur} ${linkExist}" title="${linkSub}" href="/w/category:${linkMain}">${linkSub}</a>`;
+        }
 
-          const linkTitle = escapeHtml(linkMain + linkDataSharp);
-          let linkExist = "";
-          if (linkMain !== "") {
-            const dbData = this.database.data.find((value) => value.title === linkMain);
-            if (!dbData) {
-              if (!this.dataBacklink[linkMain]) {
-                this.dataBacklink[linkMain] = {};
-              }
-              this.dataBacklink[linkMain]["no"] = "";
-              linkExist = "opennamu_not_exist_link";
-            } else {
-              if (!this.dataBacklink[linkMain]) {
-                this.dataBacklink[linkMain] = {};
-              }
-              this.dataBacklink[linkMain][""] = "";
+        this.renderData = this.renderData.replace(linkRegex, "");
+      }
+      // inter link 처리 (미구현/오픈나무 전용 문법)
+      else if (/^(?:inter|인터):([^:]+):/i.test(linkMain)) {
+        const linkInterRegex = /^(?:inter|인터):([^:]+):/i;
+
+        const linkInterNameMatch = linkMain.match(linkInterRegex) || [];
+        let linkInterName: string = linkInterNameMatch ? linkInterNameMatch[1] : "";
+
+        linkMain = linkMain.replace(new RegExp(linkInterRegex, "g"), "");
+        const linkTitle = `${linkInterName}:${linkMain}`;
+
+        linkMain = linkMain.replace(/&#x27;/g, "<link_single>");
+        const linkDataSharpRegex = /#([^#]+)$/;
+        let linkDataSharpMatch = linkMain.match(linkDataSharpRegex) || [];
+        let linkDataSharp!: string;
+        if (linkDataSharpMatch.length === 0) {
+          linkDataSharp = linkDataSharpMatch[1];
+          linkDataSharp = unescapeHtml(linkDataSharp);
+          linkDataSharp = "#" + urlPas(linkDataSharp);
+          linkMain = linkMain.replace(new RegExp(linkDataSharpRegex, "g"), "");
+        } else {
+          linkDataSharp = "";
+        }
+
+        linkMain = linkMain.replaceAll("<link_single>", "&#x27;");
+
+        // main link fix
+        linkMain = this.getToolDataRestore(linkMain, "slash");
+        linkMain = unescapeHtml(linkMain);
+        linkMain = urlPas(linkMain);
+
+        // 미구현: 인터위키
+        this.renderData = this.renderData.replace(linkRegex, linkData[2]);
+      }
+      // out link 처리
+      else if (/^https?:\/\//i.test(linkMain)) {
+        linkMain = this.getToolDataRestore(linkMain, "slash");
+        const linkTitle = linkMain;
+        linkMain = unescapeHtml(linkMain);
+
+        linkMain = linkMain.replace(/"/g, "&quot;");
+        linkMain = linkMain.replace(/</g, "&lt;");
+        linkMain = linkMain.replace(/>/g, "&gt;");
+
+        // sub not exist -> sub = main
+        let linkSub = linkData[1] || "";
+        const linkSubStorage = linkSub ? "" : linkMainOrg;
+
+        const linkClass = "opennamu_link_out";
+        // 미구현: 인터위키
+
+        const addStr = linkData[2] || "";
+
+        const dataName = this.getToolDataStorage(
+          `<a class="${linkClass}" target="_blank" title="${linkTitle}" href="${linkMain}">${linkSubStorage}`,
+          "</a>",
+          linkDataFull
+        );
+        this.renderData = this.renderData.replace(linkRegex, `<${dataName}>${linkSub}</${dataName}>` + addStr);
+      }
+      // in link 처리
+      else {
+        // under page & fix url
+        linkMain = this.getToolLinkFix(linkMain);
+
+        // sharp
+        linkMain = linkMain.replace(/&#x27;/g, "<link_single>");
+        const linkDataSharpRegex = /#([^#]+)$/;
+        let linkDataSharpMatch = linkMain.match(linkDataSharpRegex) || [];
+        let linkDataSharp!: string;
+        if (linkDataSharpMatch.length !== 0) {
+          linkDataSharp = linkDataSharpMatch[1];
+          linkDataSharp = unescapeHtml(linkDataSharp);
+          linkDataSharp = "#" + urlPas(linkDataSharp);
+
+          linkMain = linkMain.replace(new RegExp(linkDataSharpRegex, "g"), "");
+        } else {
+          linkDataSharp = "";
+        }
+
+        linkMain = linkMain.replaceAll("<link_single>", "&#x27;");
+
+        // main link fix
+        linkMain = this.getToolDataRestore(linkMain, "slash");
+        linkMain = unescapeHtml(linkMain);
+
+        // link title
+        const linkTitle = escapeHtml(linkMain + linkDataSharp);
+        let linkExist = "";
+        if (linkMain !== "") {
+          // 미구현: self.link_case_insensitive
+          const dbData = this.database.data.find((value) => value.title === linkMain)?.title;
+          if (!dbData) {
+            if (!this.dataBacklink[linkMain]) {
+              this.dataBacklink[linkMain] = {};
+            }
+            this.dataBacklink[linkMain]["no"] = "";
+            linkExist = "opennamu_not_exist_link";
+          } else {
+            if (!this.dataBacklink[linkMain]) {
+              this.dataBacklink[linkMain] = {};
             }
           }
-
-          let linkSame = "";
-          if (linkMain === this.docName) {
-            linkSame = "opennamu_same_link";
-          }
-
-          linkMain = urlPas(linkMain);
-          if (linkMain !== "") {
-            linkMain = "/w/" + linkMain;
-          }
-
-          let linkSub = linkData[1] || "";
-          const linkSubStorage = linkSub ? "" : linkMainOriginal;
-
-          this.linkCount += 1;
-          const addStr = linkData[2] || "";
-          const dataName = this.getToolDataStorage(
-            `<a class="${linkExist} ${linkSame}" title="${linkTitle}" href="${linkMain}${linkDataSharp}">${linkSubStorage}</a>`,
-            "",
-            linkDataFull
-          );
-          this.renderData = this.renderData.replace(linkRegex, `<${dataName}>${linkSub}</${dataName}>` + addStr);
+          this.dataBacklink[linkMain][""] = "";
         }
+
+        let linkSame = "";
+        if (linkMain === this.docName) {
+          linkSame = "opennamu_same_link";
+        }
+
+        linkMain = urlPas(linkMain);
+
+        if (linkMain !== "") {
+          linkMain = "/w/" + linkMain;
+        }
+
+        // sub not exist
+        let linkSub = linkData[1] || "";
+        const linkSubStorage = linkSub ? "" : linkMainOrg;
+
+        this.linkCount += 1;
+
+        const addStr = linkData[2] || "";
+        const dataName = this.getToolDataStorage(
+          `<a class="${linkExist} ${linkSame}" title="${linkTitle}" href="${linkMain}${linkDataSharpMatch}">${linkSubStorage}`,
+          "</a>",
+          linkDataFull
+        );
+        this.renderData = this.renderData.replace(linkRegex, `<${dataName}>${linkSub}</${dataName}>` + addStr);
       }
 
       linkCountAll -= 1;
@@ -2025,10 +1929,9 @@ try {
           const footnoteNameAdd = footnoteDataGroups[0] ? ` (${footnoteNumStr})` : "";
           const footnoteTextData = footnoteDataGroups[1] || "";
 
-
-          let fn = ""
-          let rfn = ""
-          let footVName = ""
+          let fn = "";
+          let rfn = "";
+          let footVName = "";
           if (this.dataFootnoteAll[footnoteName] || this.dataFootnote[footnoteName]) {
             let footnoteFirst!: string;
             if (this.dataFootnote[footnoteName]) {
@@ -2037,9 +1940,9 @@ try {
             } else {
               this.dataFootnote[footnoteName] = {
                 list: [footnoteNumStr],
-                data: footnoteTextData
+                data: footnoteTextData,
               };
-              footnoteFirst = this.dataFootnoteAll[footnoteName]["list"][0]
+              footnoteFirst = this.dataFootnoteAll[footnoteName]["list"][0];
             }
 
             fn = this.docSet["docInclude"] + "fn_" + footnoteFirst;
@@ -2052,7 +1955,7 @@ try {
             }
 
             if (useViewRealFootnoteNum === "on") {
-              footVName += ` ${footnoteNumStr}`
+              footVName += ` ${footnoteNumStr}`;
             }
           } else {
             this.dataFootnote[footnoteName] = {
@@ -2070,7 +1973,7 @@ try {
             }
 
             if (useViewRealFootnoteNum === "on") {
-              footVName += footnoteNameAdd
+              footVName += footnoteNameAdd;
             }
           }
 
@@ -2283,180 +2186,6 @@ try {
     }
   }
 
-  // re.sub fix
-  // manageHeading() {
-  //   let tocList = [];
-
-  //   // make heading base
-  //   const headingRegex = /\n((={1,6})(#?) ?([^\n]+))\n/;
-  //   let headingCountAll = (this.renderData.match(globalRegExp(headingRegex)) || []).length * 3;
-  //   let headingStack = [0, 0, 0, 0, 0, 0];
-  //   let headingCount = 0;
-
-  //   while (true) {
-  //     headingCount += 1;
-
-  //     const headingData = headingRegex.exec(this.renderData);
-  //     if (!headingData) {
-  //       break;
-  //     } else if (headingCountAll < 0) {
-  //       console.error("Error : render heading count overflow");
-  //       break;
-  //     } else {
-  //       const headingDataOriginal = headingData[0];
-  //       const headingDataGroups = headingData.slice(1);
-
-  //       const headingDataLastRegex = / ?(#?={1,6}[^=]*)$/;
-  //       const headingDataLast = headingDataGroups[3].match(headingDataLastRegex);
-  //       let headingDataLastValue = headingDataLast ? headingDataLast[1] : "";
-
-  //       const headingDataText = headingDataGroups[3].replace(new RegExp(headingDataLastRegex, "g"), "");
-
-  //       const headingDataDiff = headingDataGroups[2] + headingDataGroups[1];
-  //       if (headingDataDiff !== headingDataLastValue) {
-  //         // front != back -> restore
-  //         let headingDataAll = headingDataGroups[0];
-
-  //         for (let forA = 6; forA >= 1; forA--) {
-  //           const forAStr = forA.toString();
-  //           const headingRestoreRegex = new RegExp(`^={${forAStr}}|={${forAStr}}$`, "g");
-
-  //           headingDataAll = headingDataAll.replace(headingRestoreRegex, `<heading_${forAStr}>`);
-  //         }
-
-  //         this.renderData = this.renderData.replace(headingRegex, `\n${headingDataAll}\n`);
-  //       } else {
-  //         const headingLevel = headingDataGroups[1].length;
-  //         const headingLevelStr = headingLevel.toString();
-
-  //         headingStack[headingLevel - 1] += 1;
-  //         for (let forA = headingLevel; forA < 6; forA++) {
-  //           headingStack[forA] = 0;
-  //         }
-
-  //         const headingStackStr = headingStack.join(".").replace(/(\.0)+$/g, "");
-  //         tocList.push(["", headingDataText]);
-
-  //         this.renderDataJS += `
-  //                   function opennamuHeadingFolding(data, element = '') {
-  //                       let fol = document.getElementById(data);
-  //                       if(fol.style.display === '' || fol.style.display === 'inline-block' || fol.style.display === 'block') {
-  //                           document.getElementById(data).style.display = 'none';
-  //                       } else {
-  //                           document.getElementById(data).style.display = 'block';
-  //                       }
-                        
-  //                       if(element !== '') {
-  //                           console.log(element.innerHTML);
-  //                           if(element.innerHTML !== '⊖') {
-  //                               element.innerHTML = '⊖';
-  //                           } else {
-  //                               element.innerHTML = '⊕';
-  //                           }
-  //                       }
-  //                   }\n
-  //               `;
-
-  //         let headingFolding = ["⊖", "block", "1"];
-  //         if (headingDataGroups[2]) {
-  //           headingFolding = ["⊕", "none", "0.5"];
-  //         }
-
-  //         let headingIdName = "edit_load_" + headingCount;
-  //         if (this.docSet["docType"] !== "view") {
-  //           headingIdName = this.docSet["docInclude"] + "edit_load_" + headingCount;
-  //         }
-
-  //         const dataName = this.getToolDataStorage(
-  //           `<h${headingLevelStr}>` +
-  //             '<span id="' +
-  //             this.docSet["docInclude"] +
-  //             "opennamu_heading_" +
-  //             headingCount +
-  //             '_sub" style="opacity: ' +
-  //             headingFolding[2] +
-  //             '">',
-  //           `<a id="${headingIdName}" href="/edit_section/${headingCount}/${urlPas(
-  //             this.docName
-  //           )}">✎</a><a href="javascript:void(0);" onclick="javascript:opennamu_heading_folding('${
-  //             this.docSet["docInclude"]
-  //           }opennamu_heading_${headingCount}', this);">${headingFolding[0]}</a></sub></span></h${headingLevelStr}>`,
-  //           headingDataOriginal
-  //         );
-
-  //         const headingDataComplete = `\n<front_br>${
-  //           headingCount !== 1 ? "</div>" : ""
-  //         }<${dataName}><heading_stack>${headingStackStr}</heading_stack> ${headingDataText}</${dataName}><div id="${
-  //           this.docSet["docInclude"]
-  //         }opennamuHeading_${headingCount}" style="display: ${headingFolding[1]};"><back_br>\n`;
-
-  //         this.renderData = this.renderData.replace(headingRegex, headingDataComplete);
-  //       }
-  //     }
-
-  //     headingCountAll -= 1;
-  //   }
-
-  //   // heading id adjust
-  //   const headingEndCount = (this.renderData.match(/<heading_stack>/g) || []).length;
-  //   for (let forA = 5; forA >= 0; forA--) {
-  //     const headingEndStackRegex = new RegExp(`<heading_stack>${"0\\.".repeat(forA)}`, "g");
-
-  //     const headingEndMatchCount = (this.renderData.match(headingEndStackRegex) || []).length;
-  //     if (headingEndMatchCount === headingEndCount) {
-  //       this.renderData = this.renderData.replace(headingEndStackRegex, "<heading_stack>");
-  //       break;
-  //     }
-  //   }
-
-  //   // heading id -> inline id
-  //   const headingIdRegex = /<heading_stack>([^<>]+)<\/heading_stack>/;
-  //   const headingIdRegexGlobal = /<heading_stack>([^<>]+)<\/heading_stack>/g;
-
-  //   let match;
-  //   const results: RegExpExecArray[] = [];
-
-  //   while ((match = headingIdRegexGlobal.exec(this.renderData)) !== null) {
-  //     results.push(match);
-  //   }
-
-  //   for (let index = 0; index < results.length; index++) {
-  //     const result = results[index];
-  //     const content = `<a href="#toc" id="s-${result[1]}">${result[1]}.</a>`;
-  //     this.renderData = this.renderData.replace(headingIdRegex, content);
-  //     tocList[index][0] = result[1];
-  //   }
-
-  //   // not heading restore
-  //   for (let forA = 1; forA <= 6; forA++) {
-  //     const forAStr = forA.toString();
-  //     const headingRestoreRegex = new RegExp(`<heading_${forAStr}>`, "g");
-  //     this.renderData = this.renderData.replace(headingRestoreRegex, "=".repeat(forA));
-  //   }
-
-  //   // make toc
-  //   let tocData = "";
-  //   if (tocList.length === 0) {
-  //     tocData = "";
-  //   } else {
-  //     tocData = `<div class="opennamu_TOC" id="toc"><span class="opennamu_TOC_title">${/*this.getToolLang('toc')*/ "목차"}</span><br>`;
-  //   }
-
-  //   for (const forA of tocList) {
-  //     tocData += `<br>${'<span style="margin-left: 10px;"></span>'.repeat(
-  //       forA[0].split(".").length - 1
-  //     )}<span class="opennamu_TOC_list"><a href="#s-${forA[0]}">${forA[0]}. </a><toc_inside>${forA[1]}</toc_inside></span>`;
-  //   }
-
-  //   if (tocData !== "") {
-  //     tocData += "</div>";
-  //     this.dataToc = tocData;
-  //     this.renderData += `<toc_data>${tocData}</toc_data>`;
-  //   } else {
-  //     this.dataToc = "";
-  //   }
-  // }
-
   manageHeading() {
     let tocList: [string, string][] = [];
 
@@ -2489,14 +2218,14 @@ try {
       const headingDataDiff = headingData[2] + headingData[1];
       if (headingDataDiff !== headingDataLast) {
         // front != back -> restore
-        let headingDataAll = headingData[0]
+        let headingDataAll = headingData[0];
 
         for (let index = 6; index >= 1; index--) {
-          const headingRestoreRegex = new RegExp('^={' + index + '}|={' + index + '}$');
-          headingDataAll = headingDataAll.replace(headingRestoreRegex, '<heading_' + index + '>')
+          const headingRestoreRegex = new RegExp("^={" + index + "}|={" + index + "}$");
+          headingDataAll = headingDataAll.replace(headingRestoreRegex, "<heading_" + index + ">");
         }
 
-        this.renderData = this.renderData.replace(headingRegex, "\n" + headingDataAll + "\n")
+        this.renderData = this.renderData.replace(headingRegex, "\n" + headingDataAll + "\n");
       } else {
         let headingLevel = headingData[1].length;
         headingStack[headingLevel - 1] += 1;
@@ -2505,15 +2234,13 @@ try {
         }
 
         const headingStackStr = headingStack.join(".").replace(/(\.0)+$/g, "");
-        tocList.push(["", headingDataText])
+        tocList.push(["", headingDataText]);
 
-        let headingFolding = ['⊖', 'block', '1']
-        if (headingData[2])
-            headingFolding = ['⊕', 'none', '0.5']
+        let headingFolding = ["⊖", "block", "1"];
+        if (headingData[2]) headingFolding = ["⊕", "none", "0.5"];
 
-        let headingIdName = 'edit_load_' + headingCount
-        if (this.docSet["docType"] !== "view")
-          headingIdName = this.docSet['docInclude'] + 'edit_load_' + headingCount
+        let headingIdName = "edit_load_" + headingCount;
+        if (this.docSet["docType"] !== "view") headingIdName = this.docSet["docInclude"] + "edit_load_" + headingCount;
 
         const dataName = this.getToolDataStorage(
           "<h" +
@@ -2546,9 +2273,32 @@ try {
           headingDataOrg
         );
 
-      const headingDataComplete = '' + '\n<front_br>' + (headingCount != 1 ? '</div>' : '') + '<' + dataName + '>' + '<heading_stack>' + headingStackStr + '</heading_stack>' + ' ' + headingDataText + '</' + dataName + '>' + '<div id="' + this.docSet['docInclude'] + 'opennamu_heading_' + headingCount + '" style="display: ' + headingFolding[1] + ';">' + '<back_br>\n' + '';
+        const headingDataComplete =
+          "" +
+          "\n<front_br>" +
+          (headingCount != 1 ? "</div>" : "") +
+          "<" +
+          dataName +
+          ">" +
+          "<heading_stack>" +
+          headingStackStr +
+          "</heading_stack>" +
+          " " +
+          headingDataText +
+          "</" +
+          dataName +
+          ">" +
+          '<div id="' +
+          this.docSet["docInclude"] +
+          "opennamu_heading_" +
+          headingCount +
+          '" style="display: ' +
+          headingFolding[1] +
+          ';">' +
+          "<back_br>\n" +
+          "";
 
-      this.renderData = this.renderData.replace(headingRegex, headingDataComplete);
+        this.renderData = this.renderData.replace(headingRegex, headingDataComplete);
       }
 
       headingCountAll -= 1;
@@ -2557,7 +2307,7 @@ try {
     // heading id adjust
     const headingEndCount = (this.renderData.match(/<heading_stack>/g) || []).length;
     for (let index = 5; index >= 0; index--) {
-      const headingEndStackRegex = new RegExp('<heading_stack>' + ('0\\.'.repeat(index)), "g");
+      const headingEndStackRegex = new RegExp("<heading_stack>" + "0\\.".repeat(index), "g");
       const headingEndMatchCount = (this.renderData.match(headingEndStackRegex) || []).length;
       if (headingEndMatchCount === headingEndCount) {
         this.renderData = this.renderData.replace(headingEndStackRegex, "<heading_stack>");
@@ -2590,30 +2340,43 @@ try {
     }
 
     // make toc
-    let tocData = ""
+    let tocData = "";
     if (tocList.length !== 0) {
-      tocData = '' + '<div class="opennamu_TOC" id="toc">' + '<span class="opennamu_TOC_title">' + "목차" + '</span>' + '<br>' + ''
+      tocData = "" + '<div class="opennamu_TOC" id="toc">' + '<span class="opennamu_TOC_title">' + "목차" + "</span>" + "<br>" + "";
     }
 
     for (const element of tocList) {
-      tocData += '' + '<br>' + ('<span style="margin-left: 10px;"></span>'.repeat(
-        element[0].split(".").length - 1
-        )) + '<span class="opennamu_TOC_list">' + '<a href="#s-' + element[0] + '">' + element[0] + '. ' + '</a>' + '<toc_inside>' + element[1] + '</toc_inside>' + '</span>' + ''
+      tocData +=
+        "" +
+        "<br>" +
+        '<span style="margin-left: 10px;"></span>'.repeat(element[0].split(".").length - 1) +
+        '<span class="opennamu_TOC_list">' +
+        '<a href="#s-' +
+        element[0] +
+        '">' +
+        element[0] +
+        ". " +
+        "</a>" +
+        "<toc_inside>" +
+        element[1] +
+        "</toc_inside>" +
+        "</span>" +
+        "";
     }
 
     if (tocData !== "") {
       tocData += "</div>";
 
       this.dataToc = tocData;
-      this.renderData += "<toc_data>" + tocData + "</toc_data>"
+      this.renderData += "<toc_data>" + tocData + "</toc_data>";
     } else {
       this.dataToc = "";
     }
   }
 
   finalize() {
-    this.renderData = this.renderData.replaceAll("<no_br>", "\n")
-    this.renderData = this.renderData.replaceAll("<no_td>", "||")
+    this.renderData = this.renderData.replaceAll("<no_br>", "\n");
+    this.renderData = this.renderData.replaceAll("<no_td>", "||");
 
     // add category
     if (this.docSet["docType"] === "view") {
@@ -2680,14 +2443,14 @@ try {
       let data = p1.split(" ");
       if (data[0] === "a" || data[0] === "/a") {
         if (data.length > 3 && data[3] != 'href="javascript:void(0);"') {
-          return `<${p1}>`
+          return `<${p1}>`;
         } else {
-          return ""
+          return "";
         }
       } else {
-        return ""
+        return "";
       }
-    }
+    };
 
     // add toc
     const handlerToc = (match: string, p1: string) => {
@@ -2732,7 +2495,13 @@ try {
         this.renderData = this.renderData.replace(/<toc_need_part>/g, "");
       }
 
-      if (this.docSet["docType"] !== "view" || this.renderData.match(/<toc_no_auto>/) || useTocSet === "half_off" || useTocSet === "off" || tocDataOn === 1) {
+      if (
+        this.docSet["docType"] !== "view" ||
+        this.renderData.match(/<toc_no_auto>/) ||
+        useTocSet === "half_off" ||
+        useTocSet === "off" ||
+        tocDataOn === 1
+      ) {
         this.renderData = this.renderData.replace(/<toc_no_auto>/g, "");
       } else {
         this.renderData = this.renderData.replace(/(?<in><h[1-6] id="[^"]*">)/, `<br>${this.dataToc}$<in>`);
@@ -2761,16 +2530,28 @@ try {
     this.renderDataJS += `document.querySelectorAll('details').forEach((el) => {new Accordion(el);});if(window.location.hash !== '' && document.getElementById(window.location.hash.replace(/^#/, ''))) {document.getElementById(window.location.hash.replace(/^#/, '')).focus();}\nopennamu_do_ip_render();\n`;
   }
 
-  parse(): { 0: string; 1: string; 2: {
-    backlink: any[][];
-    backlink_dict: Record<string, any>;
-    footnote: Record<string, {
-        list: string[];
-        data: string;
-    }>;
-    category: string[];
-    temp_storage: any[];
-    link_count: number; } } {
+  manageAfterwork() {
+
+  }
+
+  parse(): {
+    0: string;
+    1: string;
+    2: {
+      backlink: any[][];
+      backlink_dict: Record<string, any>;
+      footnote: Record<
+        string,
+        {
+          list: string[];
+          data: string;
+        }
+      >;
+      category: string[];
+      temp_storage: any[];
+      link_count: number;
+    };
+  } {
     this.manageRemark();
     this.manageIncludeDefault();
     this.manageSlash();
@@ -2787,16 +2568,18 @@ try {
       this.manageFootnote();
       this.manageHeading();
       this.finalize();
+      this.renderDataJS = `window.addEventListener("load", function(){ ${this.renderDataJS} })`
     } else {
-      this.renderData = this.renderData.replace(/\|\|/g, "<no_td>")
-      this.renderData = this.renderData.replace(/\n/g, "<no_br>")
+      this.renderData = this.renderData.replace(/\|\|/g, "<no_td>");
+      this.renderData = this.renderData.replace(/\n/g, "<no_br>");
     }
+    this.manageAfterwork();
 
     const dataBacklinkDict = this.dataBacklink;
     const dataBacklinkList = [];
     for (const forA of Object.keys(this.dataBacklink)) {
       for (const forB of Object.keys(this.dataBacklink[forA])) {
-        dataBacklinkList.push([this.docName, forA, forB, this.dataBacklink[forA][forB]])
+        dataBacklinkList.push([this.docName, forA, forB, this.dataBacklink[forA][forB]]);
       }
     }
 
@@ -2811,7 +2594,7 @@ try {
         temp_storage: [this.dataTempStorage, this.dataTempStorageCount],
         link_count: this.linkCount,
         // redirect: this.dataRedirect
-      }
+      },
     ];
   }
 }
