@@ -11,7 +11,7 @@ interface IDocSet {
 }
 interface IConfig {
   docName: string;
-  docSet?: IDocSet;
+  docType?: "view" | "from" | "thread" | "include";
   useStrike?: "default" | "normal" | "change" | "delete";
   useBold?: "default" | "normal" | "change" | "delete";
   useCategorySet?: "default" | "bottom" | "top";
@@ -118,10 +118,8 @@ export class NamuMark {
     }
 
     this.renderData = "<back_br>\n" + this.renderData + "\n<front_br>";
-    console.log(JSON.stringify(config));
-
-    config.docSet = { docInclude: v4().replaceAll("-", "") + "_", docType: "view" };
-    type TOmitted = keyof Omit<Omit<IConfig, "docSet">, "docName">;
+    this.docSet = { docInclude: v4().replaceAll("-", "") + "_", docType: config.docType || "view" };
+    type TOmitted = keyof Omit<Omit<IConfig, "docType">, "docName">;
     for (const key of skinUseConfig) {
       const value = config[key as TOmitted];
       if (!value) {
@@ -129,7 +127,9 @@ export class NamuMark {
       }
     }
 
-    this.docSet = config.docSet;
+    // 기본값으로 설정 (임의적)
+    config.useTocSet = "half_off"
+
     this.config = config;
 
     this.database = database;
@@ -333,7 +333,7 @@ export class NamuMark {
     const docSet = { ...this.docSet };
     docSet["docInclude"] = docInclude;
 
-    const dataEnd = new NamuMark(data, { docName: this.docName, docSet: this.docSet }, this.database, "inter").parse();
+    const dataEnd = new NamuMark(data, { docName: this.docName }, this.database, "inter").parse();
     this.renderDataJS += dataEnd[1];
     this.dataCategoryList.push(...dataEnd[2]["category"]);
     this.dataBacklink = { ...this.dataBacklink, ...dataEnd[2]["backlink_dict"] };
@@ -400,12 +400,18 @@ export class NamuMark {
       const matchOrg = includeMatch[0];
       let match = includeMatch.slice(1);
 
-      const macroSplitRegex = /(?:^|,) *([^,]+)/;
+      const macroSplitRegex = /(?:^|,) *([^,]+)/g;
       const macroSplitSubRegex = /^([^=]+) *= *(.*)$/;
 
       let includeName = "";
 
-      let data = match[0].match(globalRegExp(macroSplitRegex)) || [];
+      let matches;
+      const data = [];
+
+      while ((matches = macroSplitRegex.exec(match[0])) !== null) {
+          data.push(matches[1]); // 첫 번째 캡처 그룹을 결과 배열에 추가
+      }
+
       for (const datum of data) {
         const dataSubMatch = datum.match(macroSplitSubRegex);
         if (dataSubMatch) {
@@ -455,21 +461,81 @@ export class NamuMark {
           this.getToolJSSafe(includeSubName) +
           '");\n';
 
-        const mark = (new NamuMark(result.data, this.config, this.database)).parse()
+        // api_w_render: route
+        //   class api_w_render_include:
+        //   def __init__(self, data_option):
+        //       self.include_change_list = data_option
+      
+        //   def __call__(self, match):
+        //       match_org = match.group(0)
+        //       match = match.groups()
+      
+        //       if len(match) < 3:
+        //           match = list(match) + ['']
+      
+        //       if match[2] == '\\':
+        //           return match_org
+        //       else:
+        //           slash_add = ''
+        //           if match[0]:
+        //               if len(match[0]) % 2 == 1:
+        //                   slash_add = '\\' * (len(match[0]) - 1)
+        //               else:
+        //                   slash_add = match[0]
+      
+        //           if match[1] in self.include_change_list:
+        //               return slash_add + self.include_change_list[match[1]]
+        //           else:
+        //               return slash_add + match[2]
+
+        const handler = () => {
+          return (match: string, p1: string, p2: string, p3: string) => {
+           const matches = [p1, p2, p3]; // 정규 표현식의 그룹들
+           if (typeof matches[2] === "number") {
+             matches[2] = ""; // 세 번째 그룹이 없을 경우 빈 문자열 추가
+           }
+     
+           if (matches[2] === "\\") {
+             return match; // 원래 문자열 반환
+           } else {
+             let slashAdd = "";
+             if (matches[0]) {
+               if (matches[0].length % 2 === 1) {
+                 slashAdd = "\\".repeat(matches[0].length - 1);
+               } else {
+                 slashAdd = matches[0];
+               }
+             }
+     
+             if (includeChangeList[matches[1]]) {
+              return slashAdd + includeChangeList[matches[1]]
+             } else {
+               return slashAdd + matches[2]; // 슬래시 추가 + 세 번째 그룹 반환
+             }
+           }
+         };
+        }
+
+        // # parameter replace
+        result.data = result.data.replace(/(\\+)?@([ㄱ-힣a-zA-Z0-9_]+)=((?:\\@|[^@\n])+)@/g, handler())
+        result.data = result.data.replace(/(\\+)?@([ㄱ-힣a-zA-Z0-9_]+)@/g, handler())
+
+        // # remove end br
+        result.data = result.data.replace(/^\n+/g, "")
+
+        const mark = (new NamuMark(result.data, { ...this.config, docName: this.docName, docType: "include" }, this.database)).parse()
         dataName = this.getToolDataStorage(
           "" +
             includeLink +
             '<div id="' +
             includeSubName +
             '" style="display: inline;">' +
-            // encodeURIComponent(JSON.stringify(includeChangeList)) +
             mark[0] +
             "</div>" +
             "",
           "",
           matchOrg
         );
-        this.renderDataJS += mark[1]
       } else {
         this.dataBacklink[includeName]["no"] = "";
         const includeLink = '<div><a class="opennamu_not_exist_link" href="/w/' + urlPas(includeName) + '">(' + includeNameOrg + ")</a></div>";
@@ -1050,7 +1116,6 @@ try {
         }
 
         tableColNum += 1;
-        console.log(tableSubParameter["col"][tableColNum], tableSubParameter["td"]);
       }
 
       tableDataEnd += '<tr style="' + tableParameter["tr"] + '">' + tableParameter["td"] + "</tr>";
@@ -1239,7 +1304,6 @@ try {
 
       if (['youtube', 'nicovideo', 'navertv', 'kakaotv', 'vimeo', 'instagram', 'twitter', 'tiktok', 'facebook'].includes(nameData)) {
         const data = match[1].match(globalRegExp(macroSplitRegex)) || [];
-        console.log(data);
 
         // get option
         let videoCode = "";
@@ -1886,7 +1950,7 @@ try {
 
         const addStr = linkData[2] || "";
         const dataName = this.getToolDataStorage(
-          `<a class="${linkExist} ${linkSame}" title="${linkTitle}" href="${linkMain}${linkDataSharpMatch}">${linkSubStorage}`,
+          `<a class="${linkExist} ${linkSame}" title="${linkTitle}" href="${linkMain}${linkDataSharp}">${linkSubStorage}`,
           "</a>",
           linkDataFull
         );
@@ -2378,6 +2442,7 @@ try {
     this.renderData = this.renderData.replaceAll("<no_br>", "\n");
     this.renderData = this.renderData.replaceAll("<no_td>", "||");
 
+    console.log(this.docSet)
     // add category
     if (this.docSet["docType"] === "view") {
       if (this.dataCategory !== "") {
