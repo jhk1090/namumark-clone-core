@@ -20,7 +20,7 @@
  1. 프로젝트에 필요한 npm 파일을 다운받습니다.\
  `npm install`\
  만약 typescript가 없다면 밑의 명령을 추가로 실행합니다.\
- `npm install -g typescript`
+ `npm install -g typescript@5.7.2`
  1. 이제 모든 준비가 끝났습니다.
 ---
 <h3>실행</h3>
