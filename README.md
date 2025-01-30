@@ -20,19 +20,19 @@ All rights reserved.
 
 code | 구현(v3.5.0-v188)
 --- | ---
-this.manageIncludeDefault(); | x
-this.manageSlash(); | x
+this.manageIncludeDefault(); | o
+this.manageSlash(); | o
 this.manageMiddle(); | o
 this.manageInclude(); | o
-this.manageMath(); | x
+this.manageMath(); | o
 this.manageTable(); | o
 this.manageList(); | o
 this.manageMacro(); | o
 this.manageLink(); | o
-this.manageText(); | x
-this.manageHr(); | x
+this.manageText(); | o
+this.manageHr(); | o
 this.manageFootnote(); | x
-this.manageHeading(); | x
+this.manageHeading(); | o
 this.finalize(); | o
 
 ### 현재 문제점

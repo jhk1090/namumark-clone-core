@@ -349,7 +349,7 @@ export class NamuMark {
   }
 
   manageIncludeDefault() {
-    const handler: (match: string, ...args: string[]) => string = (match, p1, p2, p3) => {
+    const handler = (match: string, p1: string, p2: string, p3: string) => {
       const matches = [p1, p2, p3]; // 정규 표현식의 그룹들
       if (typeof matches[2] === "number") {
         matches[2] = ""; // 세 번째 그룹이 없을 경우 빈 문자열 추가
@@ -484,7 +484,7 @@ export class NamuMark {
   }
 
   manageSlash() {
-    const handler: (match: string, ...args: any[]) => string = (match, p1) => {
+    const handler = (match: string, p1: string) => {
       if (p1 === "<") {
         return "<";
       } else {
