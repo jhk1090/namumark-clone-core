@@ -1,4 +1,4 @@
-import crypto, { randomUUID } from "node:crypto";
+import crypto from "crypto";
 
 export const urlPas = (data: string) => {
   return encodeURIComponent(data.replace(/^\./g, "\\\\.")).replaceAll("/", "%2F");

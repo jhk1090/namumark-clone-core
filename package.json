@@ -10,11 +10,11 @@
   "author": "jhk1090",
   "license": "MIT",
   "devDependencies": {
-    "@types/jsdom": "^21.1.7",
     "@types/node": "^22.10.8",
     "@types/uuid": "^10.0.0"
   },
   "dependencies": {
+    "crypto": "^1.0.1",
     "uuid": "^11.0.5"
   }
 }
